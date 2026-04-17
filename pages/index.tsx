@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import SEO from '../components/SEO'
+import SignalField from '../components/SignalField'
 
 // ─── Letter shuffle ────────────────────────────────────────────────────────
 function shuffleLetters(el: HTMLElement, options: { iterations?: number } = {}) {
@@ -147,13 +148,16 @@ export default function Home() {
     <>
       <SEO description="Engineer. Maker. Venice." />
 
+      <SignalField />
+
       <div style={{
         position:  'fixed',
-        top:       '22vh',
+        top:       '9vh',
         left:      '50%',
         transform: 'translateX(-50%)',
         width:      560,
         maxWidth:  'calc(100vw - 48px)',
+        zIndex:    2,
       }}>
           <TimeLocation />
           <p
