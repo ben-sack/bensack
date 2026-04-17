@@ -148,6 +148,51 @@ const BUDDY_BODIES: Record<string, string[][]> = {
   ],
 }
 
+// ─── Speech phrases ────────────────────────────────────────────────────────────
+// prettier-ignore
+const BUDDY_PHRASES: Record<string, string[]> = {
+  duck:     ['quack!', 'QUACK',  'quack?', '...'],
+  goose:    ['HONK!!', 'HONK',   'honk~',  'honk?'],
+  blob:     ['bloop~', 'glorp',  '...',    'bloop?'],
+  cat:      ['meow',   'mrrrow', 'purr~',  '...'],
+  dragon:   ['RAWR!',  'grrr',   '...',    'rawr?'],
+  octopus:  ['splsh!', 'ink!',   'hi!',    '...'],
+  owl:      ['hoo?',   'HOO!',   'hmm',    '...'],
+  penguin:  ['brrr!',  'waddle', 'brr?',   '...'],
+  turtle:   ['...',    'slow~',  'hmm',    'yep'],
+  snail:    ['slurp',  '...',    'heyyy',  'hi~'],
+  ghost:    ['BOO!',   'wooo~',  'boo?',   '...'],
+  axolotl:  ['hi~',   ':)',     '...',    'helo!'],
+  capybara: ['...',    '*chew*', 'munch',  'ok'],
+  cactus:   ['ouch!',  '...',    'poke!',  'hi!'],
+  robot:    ['beep',   'boop!',  '01010',  'ERR?'],
+  rabbit:   ['*hop*',  'hi!',    'boing',  '...'],
+  mushroom: ['spore!', '...',    'grow~',  'hi!'],
+  chonk:    ['*nap*',  'chonk',  'nom',    '...'],
+}
+const GREET_PHRASES = ['hi!', 'hello!', 'hey!', 'yo!', 'sup?', 'hiya!', ':)']
+const BUBBLE_LIFE   = 3.0   // seconds a speech bubble stays visible
+
+// ─── Ground props ──────────────────────────────────────────────────────────────
+// Lines are bottom-aligned: last line sits just above the ground platform.
+// prettier-ignore
+const PROP_TEMPLATES: string[][] = [
+  // Pine tree
+  ['  *  ', ' /|\\ ', '  |  '],
+  // Lamp post
+  ['.-.', ' | ', ' | ', ' | '],
+  // Bench
+  ['_____', '[   ]', ' | | '],
+  // Flowers
+  ['*~*~*', ' ||| '],
+  // Round shrub
+  ['(~~~)', '\\___/'],
+  // Signpost
+  ['.----.', '|    |', "'----'", '  ||  '],
+  // Mailbox
+  [' .--. ', '(====)', ' [  ] '],
+]
+
 interface BuddyState {
   species:      string
   x:            number    // top-left pixel x
@@ -156,15 +201,20 @@ interface BuddyState {
   vy:           number    // px/s
   facing:       1 | -1   // 1=right  -1=left (mirrors art)
   onGround:     boolean
-  state:        'walk' | 'airborne' | 'pause' | 'greet'
-  timer:        number    // seconds until next state action
-  jumpCooldown: number    // seconds until next jump allowed
-  animFrame:    number    // 0–2
-  animTimer:    number    // seconds until next animation frame
-  greetIdx:     number    // index of buddy being greeted (-1 if none)
+  state:         'walk' | 'airborne' | 'pause' | 'greet' | 'sleep'
+  timer:         number    // seconds until next state action
+  jumpCooldown:  number    // seconds until next jump allowed
+  greetCooldown: number    // seconds until this buddy can greet again
+  animFrame:     number    // 0–2
+  animTimer:     number    // seconds until next animation frame
+  greetIdx:      number    // index of buddy being greeted (-1 if none)
+  sleepPhase:    number    // drives the floating-z animation
+  bubble:        { text: string; life: number } | null
 }
 
-interface Platform { x: number; y: number; w: number }
+interface Platform   { x: number; y: number; w: number }
+interface GroundProp { x: number; lines: string[] }
+interface Particle   { x: number; y: number; vx: number; vy: number; life: number; ch: string }
 
 // Mirror a single ASCII line so buddies face left
 function mirrorLine(line: string): string {
@@ -550,6 +600,8 @@ export default function SignalField({ mode }: Props) {
     let conLastSwitch = 0
     let buddies:      BuddyState[]          = []
     let platforms:    Platform[]            = []
+    let groundProps:  GroundProp[]          = []
+    let particles:    Particle[]            = []
 
     // ── Buddy pixel dimensions (used in physics, hit-testing, and rendering) ──
     const BW = 84         // approx rendered width of a 12-char buddy line
@@ -620,19 +672,29 @@ export default function SignalField({ mode }: Props) {
       ]
     }
 
+    // Scatter decorative props evenly along the ground platform.
+    function setupGroundProps() {
+      if (platforms.length === 0) return
+      const positions = [0.06, 0.17, 0.30, 0.47, 0.63, 0.77, 0.91]
+      groundProps = positions.map((frac, i) => ({
+        x:     Math.floor(W * frac),
+        lines: PROP_TEMPLATES[i % PROP_TEMPLATES.length],
+      }))
+    }
+
     function initBots() {
       setupPlatforms()
-      const BH      = 5 * CELL_H
+      setupGroundProps()
+      particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
       const COUNT    = Math.min(12, SPECIES.length)
       const shuffled = [...SPECIES].sort(() => Math.random() - 0.5)
       // Exclude ground platform for initial placement (index 0)
       const spawnPlats = platforms.slice(1)
       buddies = Array.from({ length: COUNT }, (_, i) => {
-        const plat  = spawnPlats[i % spawnPlats.length]
-        const BW    = 84
-        const xPos  = plat.x + Math.random() * Math.max(0, plat.w - BW)
-        const yPos  = plat.y - BH
+        const plat = spawnPlats[i % spawnPlats.length]
+        const xPos = plat.x + Math.random() * Math.max(0, plat.w - BW)
+        const yPos = plat.y - BH
         return {
           species:      shuffled[i % shuffled.length],
           x:            xPos,
@@ -643,10 +705,13 @@ export default function SignalField({ mode }: Props) {
           onGround:     true,
           state:        'walk' as const,
           timer:        Math.random() * 3,
-          jumpCooldown: Math.random() * 2,
-          animFrame:    Math.floor(Math.random() * 3),
-          animTimer:    Math.random() * 0.5,
-          greetIdx:     -1,
+          jumpCooldown:  Math.random() * 2,
+          greetCooldown: 0,
+          animFrame:     Math.floor(Math.random() * 3),
+          animTimer:     Math.random() * 0.5,
+          greetIdx:      -1,
+          sleepPhase:    0,
+          bubble:        null,
         }
       })
     }
@@ -669,7 +734,7 @@ export default function SignalField({ mode }: Props) {
       if (m === 'city') initCity(now)
       if (m === 'surf') { invalidateSceneCache() }
       if (m === 'bots') initBots()
-      else setupPlatforms()   // keep platforms in sync with viewport on resize
+      else { setupPlatforms(); setupGroundProps() }  // keep layout in sync on resize
     }
     resize()
 
@@ -941,6 +1006,7 @@ export default function SignalField({ mode }: Props) {
           b.vx = 0; b.vy = 0
           b.onGround = false
           b.state = 'airborne'
+          b.sleepPhase = 0
           continue
         }
 
@@ -950,8 +1016,15 @@ export default function SignalField({ mode }: Props) {
           b.animFrame = (b.animFrame + 1) % 3
           b.animTimer = 0.30 + Math.random() * 0.25
         }
-        b.jumpCooldown -= dt
-        b.timer        -= dt
+        b.jumpCooldown  -= dt
+        b.greetCooldown -= dt
+        b.timer         -= dt
+
+        // Tick speech bubble lifetime
+        if (b.bubble) {
+          b.bubble.life -= dt
+          if (b.bubble.life <= 0) b.bubble = null
+        }
 
         // Mouse repel (horizontal push, slight upward bump)
         const cx = b.x + BW / 2, cy = b.y + BH / 2
@@ -980,6 +1053,11 @@ export default function SignalField({ mode }: Props) {
               b.timer  = 1.5 + Math.random() * 2.5
             } else if (roll < 0.72) {
               b.state = 'pause'; b.timer = 0.6 + Math.random() * 1.2
+              // 2% chance to mutter something on entering a pause (keep it rare)
+              if (!b.bubble && Math.random() < 0.02) {
+                const opts = BUDDY_PHRASES[b.species] ?? ['...']
+                b.bubble = { text: opts[Math.floor(Math.random() * opts.length)], life: BUBBLE_LIFE }
+              }
             } else {
               b.timer = 1.5 + Math.random() * 3
             }
@@ -1007,9 +1085,25 @@ export default function SignalField({ mode }: Props) {
         } else if (b.state === 'pause') {
           b.vx *= 0.80
           if (b.timer <= 0) {
+            // 20% chance to fall asleep instead of resuming walk
+            if (Math.random() < 0.20) {
+              b.state = 'sleep'
+              b.timer = 8 + Math.random() * 10
+              b.sleepPhase = 0
+            } else {
+              b.state = 'walk'
+              b.timer = 2 + Math.random() * 3
+              if (Math.random() < 0.4) b.facing = (b.facing === 1 ? -1 : 1)
+            }
+          }
+        } else if (b.state === 'sleep') {
+          b.vx *= 0.85
+          b.sleepPhase += dt * 0.55
+          // Wake up if timer expires or mouse repel knocked them significantly
+          if (b.timer <= 0 || Math.abs(b.vx) > 60) {
             b.state = 'walk'
-            b.timer = 2 + Math.random() * 3
-            if (Math.random() < 0.4) b.facing = (b.facing === 1 ? -1 : 1)
+            b.timer = 1 + Math.random() * 2
+            b.sleepPhase = 0
           }
         } else { // greet
           b.vx *= 0.78
@@ -1021,7 +1115,7 @@ export default function SignalField({ mode }: Props) {
           }
         }
 
-        // Apply gravity when airborne (walk/pause on ground handled above)
+        // Apply gravity when airborne (walk/pause/sleep on ground handled above)
         if (!b.onGround && b.state !== 'airborne') {
           b.vy = Math.min(b.vy + GRAVITY * dt, MAX_FALL)
         }
@@ -1048,6 +1142,19 @@ export default function SignalField({ mode }: Props) {
               b.onGround = true
               if (b.state === 'airborne') {
                 b.state = 'walk'; b.timer = 1 + Math.random() * 2
+                // Landing dust — small burst of chars outward from feet
+                const DUST_CHARS = ['·', '.', "'"]
+                for (let p = 0; p < 5; p++) {
+                  const side = p < 3 ? -1 : 1
+                  particles.push({
+                    x:    b.x + BW / 2 + (Math.random() - 0.5) * BW * 0.5,
+                    y:    plat.y - 2,
+                    vx:   side * (20 + Math.random() * 50),
+                    vy:   -(10 + Math.random() * 30),
+                    life: 1.0,
+                    ch:   DUST_CHARS[Math.floor(Math.random() * DUST_CHARS.length)],
+                  })
+                }
               }
               break
             }
@@ -1057,6 +1164,7 @@ export default function SignalField({ mode }: Props) {
         // As soon as a buddy leaves any surface, switch to airborne so gravity
         // applies at full strength — eliminates floating-in-walk-state bug.
         if (!b.onGround && b.state !== 'airborne') {
+          if (b.state === 'sleep') b.sleepPhase = 0   // wake up if sleeping
           b.state = 'airborne'
         }
       }
@@ -1066,14 +1174,22 @@ export default function SignalField({ mode }: Props) {
         for (let j = i + 1; j < buddies.length; j++) {
           const bi = buddies[i], bj = buddies[j]
           if (bi.state === 'greet' || bj.state === 'greet') continue
+          if (bi.greetCooldown > 0 || bj.greetCooldown > 0) continue
           const dx = (bi.x + BW / 2) - (bj.x + BW / 2)
           const dy = (bi.y + BH / 2) - (bj.y + BH / 2)
           if (Math.sqrt(dx * dx + dy * dy) < GREET) {
             bi.state = 'greet'; bi.timer = 1.8; bi.greetIdx = j; bi.vx = 0
             bj.state = 'greet'; bj.timer = 1.8; bj.greetIdx = i; bj.vx = 0
+            // Long cooldown so the same pair can't immediately re-greet
+            bi.greetCooldown = 12 + Math.random() * 8
+            bj.greetCooldown = 12 + Math.random() * 8
             // Face each other
             bi.facing = bi.x < bj.x ?  1 : -1
             bj.facing = bj.x < bi.x ?  1 : -1
+            // Give each a greeting bubble
+            const pick = () => GREET_PHRASES[Math.floor(Math.random() * GREET_PHRASES.length)]
+            if (!bi.bubble) bi.bubble = { text: pick(), life: BUBBLE_LIFE }
+            if (!bj.bubble) bj.bubble = { text: pick(), life: BUBBLE_LIFE }
           }
         }
       }
@@ -1094,7 +1210,33 @@ export default function SignalField({ mode }: Props) {
         }
       }
 
-      // Draw buddies
+      // ── Ground props ────────────────────────────────────────────────────────
+      if (platforms.length > 0) {
+        const gY = platforms[0].y
+        c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.16)'
+        for (const prop of groundProps) {
+          for (let li = 0; li < prop.lines.length; li++) {
+            // Last line sits one cell above the ground platform line
+            const py = gY - (prop.lines.length - li) * CELL_H
+            c2d.fillText(prop.lines[li], prop.x, py)
+          }
+        }
+      }
+
+      // ── Particles (landing dust) — update then draw behind buddies ──────────
+      for (let pi = particles.length - 1; pi >= 0; pi--) {
+        const p = particles[pi]
+        p.x    += p.vx * dt
+        p.y    += p.vy * dt
+        p.vy   += 180 * dt   // gentle gravity pull-down
+        p.life -= dt * 2.8   // fades out in ~0.36 s
+        if (p.life <= 0) { particles.splice(pi, 1); continue }
+        const pa = (dark ? 0.55 : 0.45) * p.life
+        c2d.fillStyle = dark ? `rgba(255,255,255,${pa})` : `rgba(30,30,30,${pa})`
+        c2d.fillText(p.ch, p.x, p.y)
+      }
+
+      // ── Buddies ─────────────────────────────────────────────────────────────
       c2d.fillStyle = dark ? 'rgba(255,255,255,0.58)' : 'rgba(30,30,30,0.52)'
       for (const b of buddies) {
         const frames = BUDDY_BODIES[b.species]
@@ -1104,12 +1246,63 @@ export default function SignalField({ mode }: Props) {
           if (b.facing === -1) line = mirrorLine(line)
           c2d.fillText(line, b.x, b.y + li * CELL_H)
         }
-        if (b.state === 'greet') {
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.90)' : 'rgba(30,30,30,0.82)'
-          c2d.fillText('!', b.x + BW / 2 - 3, b.y - CELL_H - 2)
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.58)' : 'rgba(30,30,30,0.52)'
+      }
+
+      // ── Sleep z's ───────────────────────────────────────────────────────────
+      for (const b of buddies) {
+        if (b.state !== 'sleep') continue
+        // Three staggered z streams drifting upward — each offset 1/3 of a cycle
+        for (let zi = 0; zi < 3; zi++) {
+          const phase = ((b.sleepPhase * 0.9) + zi * 0.33) % 1
+          const alpha = Math.sin(phase * Math.PI) * (dark ? 0.62 : 0.50)
+          if (alpha < 0.02) continue
+          const drift = phase * CELL_H * 3
+          c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+          c2d.fillText('z', b.x + BW * 0.60 + zi * 4, b.y - drift)
         }
       }
+
+      // ── Names on hover ──────────────────────────────────────────────────────
+      c2d.textAlign = 'center'
+      for (const b of buddies) {
+        const ndx  = (b.x + BW / 2) - mx
+        const ndy  = (b.y + BH / 2) - my
+        const dist = Math.sqrt(ndx * ndx + ndy * ndy)
+        const na   = Math.max(0, (80 - dist) / 80) * (dark ? 0.60 : 0.50)
+        if (na < 0.01) continue
+        c2d.fillStyle = dark ? `rgba(255,255,255,${na})` : `rgba(30,30,30,${na})`
+        c2d.fillText(b.species, b.x + BW / 2, b.y - CELL_H)
+      }
+      c2d.textAlign = 'left'
+
+      // ── Speech bubbles ──────────────────────────────────────────────────────
+      c2d.textAlign = 'center'
+      for (const b of buddies) {
+        if (!b.bubble) continue
+        const { text, life } = b.bubble
+        // Fade in over first 0.25 s, fade out over last 0.5 s
+        const fadeIn  = Math.min(1, (BUBBLE_LIFE - life) / 0.25)
+        const fadeOut = Math.min(1, life / 0.5)
+        const alpha   = (dark ? 0.90 : 0.78) * fadeIn * fadeOut
+        if (alpha <= 0) continue
+
+        const dashes = '-'.repeat(text.length + 2)
+        const top = '.' + dashes + '.'
+        const mid = '| ' + text + ' |'
+        const bot = "'" + dashes + "'"
+
+        c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+        const bx = b.x + BW / 2
+        const by = b.y - 4 * CELL_H   // box top is 4 cells above buddy head
+        c2d.fillText(top, bx, by)
+        c2d.fillText(mid, bx, by + CELL_H)
+        c2d.fillText(bot, bx, by + 2 * CELL_H)
+        // Tail sits one cell above buddy head, nudged left of centre
+        c2d.textAlign = 'left'
+        c2d.fillText('\\', bx - 6, by + 3 * CELL_H)
+        c2d.textAlign = 'center'
+      }
+      c2d.textAlign = 'left'  // restore default
 
       // ── Cursor feedback (grab when hoverable, grabbing while dragging) ──────
       const hx = mouseRef.current.x, hy = mouseRef.current.y
@@ -1131,6 +1324,7 @@ export default function SignalField({ mode }: Props) {
         if (prevMode === 'bots') {
           dragIdx = -1
           dragHistory.length = 0
+          particles.length = 0
           document.body.style.cursor = ''
         }
         prevMode = m
