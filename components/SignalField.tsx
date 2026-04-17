@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 
 // ─── Modes ─────────────────────────────────────────────────────────────────────
-export type FieldMode = 'density' | 'waves' | 'rain' | 'city' | 'surf' | 'bots'
+export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'surf' | 'bots'
+export type BotEffect  = 'none' | 'rain' | 'stars'
 
 // ─── Character ramps ───────────────────────────────────────────────────────────
 const DENSITY_RAMP = [' ', '.', ':', ';', '=', '+', 'x', '#', '@'] as const
@@ -567,19 +568,21 @@ interface ConstellationStar {
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
-interface Props { mode: FieldMode }
+interface Props { mode: FieldMode; effect?: BotEffect }
 
-export default function SignalField({ mode }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const mouseRef  = useRef({ x: -9999, y: -9999 })
-  const isDarkRef = useRef(false)
-  const modeRef   = useRef<FieldMode>(mode)
+export default function SignalField({ mode, effect }: Props) {
+  const canvasRef  = useRef<HTMLCanvasElement>(null)
+  const mouseRef   = useRef({ x: -9999, y: -9999 })
+  const isDarkRef  = useRef(false)
+  const modeRef    = useRef<FieldMode>(mode)
+  const effectRef  = useRef<BotEffect>('none')
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => setMounted(true), [])
   useEffect(() => { isDarkRef.current = resolvedTheme === 'dark' }, [resolvedTheme])
   useEffect(() => { modeRef.current = mode }, [mode])
+  useEffect(() => { effectRef.current = effect ?? 'none' }, [effect])
 
   useEffect(() => {
     if (!mounted) return
@@ -603,10 +606,15 @@ export default function SignalField({ mode }: Props) {
     let groundProps:  GroundProp[]          = []
     let particles:    Particle[]            = []
 
-    // ── Shooting stars (city mode) ─────────────────────────────────────────────
+    // ── Shooting stars (city mode + night overlay) ────────────────────────────
     let shootStars: Array<{ x: number; y: number; vx: number; vy: number; bright: number }> = []
     let cityBursts: Particle[] = []
     let shootTimer  = 0
+
+    // ── Bots mode overlays ────────────────────────────────────────────────────
+    let rainActive:  boolean[]  = []   // which columns carry rain drops
+    let rainSplash:  Particle[] = []   // short-lived splash chars
+    let prevEffect: BotEffect = 'none'
 
     // ── Buddy pixel dimensions (used in physics, hit-testing, and rendering) ──
     const BW = 84         // approx rendered width of a 12-char buddy line
@@ -723,6 +731,24 @@ export default function SignalField({ mode }: Props) {
       })
     }
 
+    // ── Stars overlay init ─────────────────────────────────────────────────────
+    function initStars() {
+      shootStars = []
+      cityBursts = []
+      shootTimer  = 0.3 + Math.random() * 1.2
+    }
+
+    // ── Rain overlay init (sparse light rain for bots scene) ──────────────────
+    function initBotsRain() {
+      rainActive = Array.from({ length: cols }, () => Math.random() < 0.55)
+      rainCols   = Array.from({ length: cols }, () => ({
+        leadY:    Math.random() * rows * 1.2 - rows * 0.15,   // stagger: some already falling
+        speed:    18 + Math.random() * 16,
+        trailLen: 2 + Math.floor(Math.random() * 3),
+      }))
+      rainSplash = []
+    }
+
     // ── Resize ──────────────────────────────────────────────────────────────────
     function resize() {
       const dpr = window.devicePixelRatio || 1
@@ -740,8 +766,13 @@ export default function SignalField({ mode }: Props) {
       if (m === 'rain') initRain()
       if (m === 'city') initCity(now)
       if (m === 'surf') { invalidateSceneCache() }
-      if (m === 'bots') initBots()
-      else { setupPlatforms(); setupGroundProps() }  // keep layout in sync on resize
+      if (m === 'bots') {
+        initBots()
+        if (effectRef.current === 'stars') initStars()
+        else if (effectRef.current === 'rain') initBotsRain()
+      } else {
+        setupPlatforms(); setupGroundProps()  // keep layout in sync on resize
+      }
     }
     resize()
 
@@ -1277,6 +1308,64 @@ export default function SignalField({ mode }: Props) {
       c2d.font = FONT
       c2d.textBaseline = 'top'
 
+      const eff = effectRef.current
+
+      // ── Stars: shooting stars arc behind bots ────────────────────────────────
+      if (eff === 'stars') {
+        // Shooting star timer + spawn
+        shootTimer -= dt
+        if (shootTimer <= 0) {
+          shootTimer = 1.2 + Math.random() * 2.8
+          const count = Math.random() < 0.40 ? 2 : 1   // 40% chance of a pair
+          for (let k = 0; k < count; k++) {
+            const dir   = Math.random() < 0.85 ? 1 : -1
+            const speed = 200 + Math.random() * 150
+            const angle = (14 + Math.random() * 22) * Math.PI / 180
+            shootStars.push({
+              x:      dir > 0 ? Math.random() * W * 0.45 : W * (0.55 + Math.random() * 0.45),
+              y:      H * 0.03 + Math.random() * H * 0.22,
+              vx:     dir * speed * Math.cos(angle),
+              vy:     speed * Math.sin(angle),
+              bright: 0.55 + Math.random() * 0.35,
+            })
+          }
+        }
+        const TRAIL_LEN  = 8
+        const TRAIL_STEP = 11
+        for (let si = shootStars.length - 1; si >= 0; si--) {
+          const s = shootStars[si]
+          s.x += s.vx * dt
+          s.y += s.vy * dt
+          const hitGround = s.y > H * 0.48
+          const offScreen = s.x > W + 80 || s.x < -80
+          if (hitGround) {
+            for (let p = 0; p < 10; p++) {
+              const a    = Math.PI * (0.25 + Math.random() * 1.5)
+              const spd2 = p < 3 ? 70 + Math.random() * 90 : 20 + Math.random() * 45
+              cityBursts.push({
+                x: s.x, y: s.y,
+                vx: Math.cos(a) * spd2,
+                vy: Math.sin(a) * spd2 - 20,
+                life: 1.0,
+                ch:   p < 3 ? '*' : p < 6 ? "'" : '·',
+              })
+            }
+            shootStars.splice(si, 1); continue
+          }
+          if (offScreen) { shootStars.splice(si, 1); continue }
+          const spd = Math.sqrt(s.vx * s.vx + s.vy * s.vy)
+          const nx  = s.vx / spd, ny = s.vy / spd
+          c2d.fillStyle = dark ? `rgba(255,255,255,${s.bright})` : `rgba(30,30,30,${s.bright * 0.85})`
+          c2d.fillText('*', s.x, s.y)
+          for (let j = 1; j <= TRAIL_LEN; j++) {
+            const ta = s.bright * (1 - j / TRAIL_LEN) * 0.75
+            if (ta < 0.02) continue
+            c2d.fillStyle = dark ? `rgba(255,255,255,${ta})` : `rgba(30,30,30,${ta * 0.85})`
+            c2d.fillText(j <= 2 ? '-' : '·', s.x - nx * TRAIL_STEP * j, s.y - ny * TRAIL_STEP * j)
+          }
+        }
+      }
+
       // Draw platforms — individual fillText calls so CELL_W grid spacing is
       // honoured; a single long string would render at natural font advance width
       // (~7 px) not the 11 px cell, causing the floor to appear short.
@@ -1382,6 +1471,114 @@ export default function SignalField({ mode }: Props) {
       }
       c2d.textAlign = 'left'  // restore default
 
+      // ── Stars: explosion bursts in front of bots ────────────────────────────
+      if (eff === 'stars') {
+        for (let pi = cityBursts.length - 1; pi >= 0; pi--) {
+          const p = cityBursts[pi]
+          p.x    += p.vx * dt
+          p.y    += p.vy * dt
+          p.vy   += 220 * dt
+          p.life -= dt * 2.0
+          if (p.life <= 0) { cityBursts.splice(pi, 1); continue }
+          const alpha = (dark ? 0.80 : 0.68) * p.life
+          c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+          c2d.fillText(p.ch, p.x, p.y)
+        }
+      }
+
+      // ── Rain: sparse light rain with surface splashes ────────────────────────
+      if (eff === 'rain') {
+        // Update + render lingering splash chars (in front of bots)
+        for (let pi = rainSplash.length - 1; pi >= 0; pi--) {
+          const p = rainSplash[pi]
+          p.x    += p.vx * dt
+          p.y    += p.vy * dt
+          p.vy   += 55 * dt    // gentle gravity
+          p.life -= dt * 4.5   // quick fade (~0.22 s)
+          if (p.life <= 0) { rainSplash.splice(pi, 1); continue }
+          const a = (dark ? 0.52 : 0.42) * p.life
+          c2d.fillStyle = dark ? `rgba(255,255,255,${a})` : `rgba(30,30,30,${a})`
+          c2d.fillText(p.ch, p.x, p.y)
+        }
+
+        // Update + render rain drops
+        for (let ci = 0; ci < rainCols.length; ci++) {
+          if (!rainActive[ci]) continue
+          const col     = rainCols[ci]
+          col.leadY    += col.speed * dt
+          const cx      = ci * CELL_W
+          const leadPxY = col.leadY * CELL_H
+
+          // Check collision with any platform
+          let splashed = false
+          for (const plat of platforms) {
+            if (cx >= plat.x && cx < plat.x + plat.w &&
+                leadPxY >= plat.y - CELL_H && leadPxY <= plat.y + CELL_H) {
+              // Spawn a small ground splash
+              if (Math.random() < 0.65) {
+                for (let s = 0; s < 2; s++) {
+                  rainSplash.push({
+                    x:    cx + (Math.random() - 0.5) * CELL_W,
+                    y:    plat.y - 2,
+                    vx:   (s === 0 ? -1 : 1) * (10 + Math.random() * 18),
+                    vy:   -(3 + Math.random() * 7),
+                    life: 1.0,
+                    ch:   Math.random() < 0.6 ? '~' : '-',
+                  })
+                }
+              }
+              col.leadY = -(1 + Math.random() * rows * 0.6)
+              splashed  = true
+              break
+            }
+          }
+          if (splashed) continue
+
+          // Check collision with a bot
+          let hitBot = false
+          for (const b of buddies) {
+            if (cx >= b.x && cx <= b.x + BW &&
+                leadPxY >= b.y && leadPxY <= b.y + BH) {
+              if (Math.random() < 0.55) {
+                rainSplash.push({
+                  x:    cx,  y: leadPxY,
+                  vx:   (Math.random() - 0.5) * 16,
+                  vy:   -(2 + Math.random() * 5),
+                  life: 0.8,
+                  ch:   Math.random() < 0.5 ? "'" : '.',
+                })
+              }
+              col.leadY = -(1 + Math.random() * rows * 0.6)
+              hitBot    = true
+              break
+            }
+          }
+          if (hitBot) continue
+
+          // Reset when fully off screen
+          if (col.leadY - col.trailLen > rows) {
+            col.leadY    = -(1 + Math.random() * 4)
+            col.speed    = 18 + Math.random() * 16
+            col.trailLen = 2 + Math.floor(Math.random() * 3)
+          }
+
+          // Render drop — thin `|` lead, short fading trail
+          const leadRow = Math.floor(col.leadY)
+          for (let i = 0; i <= col.trailLen; i++) {
+            const row = leadRow - i
+            if (row < 0 || row >= rows) continue
+            const cy        = row * CELL_H
+            const progress  = 1 - i / col.trailLen
+            const baseAlpha = dark ? 0.04 + progress * 0.26 : 0.03 + progress * 0.18
+            const ch        = i === 0 ? '|' : i === 1 ? "'" : '.'
+            c2d.fillStyle   = dark
+              ? `rgba(255,255,255,${baseAlpha})`
+              : `rgba(30,30,30,${baseAlpha})`
+            c2d.fillText(ch, cx, cy)
+          }
+        }
+      }
+
       // ── Cursor feedback (grab when hoverable, grabbing while dragging) ──────
       const hx = mouseRef.current.x, hy = mouseRef.current.y
       const wantCursor = dragIdx >= 0
@@ -1403,6 +1600,10 @@ export default function SignalField({ mode }: Props) {
           dragIdx = -1
           dragHistory.length = 0
           particles.length = 0
+          shootStars = []
+          cityBursts = []
+          rainSplash = []
+          prevEffect = 'none'
           document.body.style.cursor = ''
         }
         if (prevMode === 'city') { shootStars = []; cityBursts = [] }
@@ -1411,6 +1612,18 @@ export default function SignalField({ mode }: Props) {
         if (m === 'city') initCity(now)
         if (m === 'surf') { invalidateSceneCache() }
         if (m === 'bots') initBots()
+      }
+
+      // ── Bots overlay effect transitions ──────────────────────────────────────
+      if (m === 'bots') {
+        const eff = effectRef.current
+        if (eff !== prevEffect) {
+          if (prevEffect === 'stars') { shootStars = []; cityBursts = [] }
+          if (prevEffect === 'rain')  rainSplash = []
+          prevEffect = eff
+          if (eff === 'stars') initStars()
+          if (eff === 'rain')  initBotsRain()
+        }
       }
 
       if      (m === 'density' || m === 'waves') drawField(t)
