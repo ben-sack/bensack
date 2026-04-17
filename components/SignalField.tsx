@@ -612,9 +612,19 @@ export default function SignalField({ mode, effect }: Props) {
     let shootTimer  = 0
 
     // ── Bots mode overlays ────────────────────────────────────────────────────
-    let rainActive:  boolean[]  = []   // which columns carry rain drops
-    let rainSplash:  Particle[] = []   // short-lived splash chars
-    let prevEffect: BotEffect = 'none'
+    let rainActive:   boolean[]  = []
+    let rainCloudRow: number[]   = []   // per-column cloud-bottom row (-1 = no cloud / dark mode)
+    let rainSplash:   Particle[] = []
+    let prevEffect:  BotEffect  = 'none'
+
+    // ── Sky background (pre-computed on resize) ────────────────────────────────
+    type SC = { x: number; y: number; ch: string }
+    type SkyCloud = { cells: SC[]; baseX: number; ox: number; vx: number }
+    let skyDarkStars:   SC[] = []
+    let skyDarkMoon:    SC[] = []
+    let skyLightClouds: SkyCloud[] = []
+    let skyLightBirds:  SC[] = []
+    let skyLightSun:    SC[] = []
 
     // ── Buddy pixel dimensions (used in physics, hit-testing, and rendering) ──
     const BW = 84         // approx rendered width of a 12-char buddy line
@@ -700,6 +710,7 @@ export default function SignalField({ mode, effect }: Props) {
     function initBots() {
       setupPlatforms()
       setupGroundProps()
+      initSky()
       particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
       const COUNT    = Math.min(12, SPECIES.length)
@@ -740,13 +751,102 @@ export default function SignalField({ mode, effect }: Props) {
 
     // ── Rain overlay init (sparse light rain for bots scene) ──────────────────
     function initBotsRain() {
-      rainActive = Array.from({ length: cols }, () => Math.random() < 0.55)
-      rainCols   = Array.from({ length: cols }, () => ({
+      const isDark = document.documentElement.classList.contains('dark')
+      // Dark: random columns active from top. Light: all inactive — cloud coverage activates them.
+      rainActive   = Array.from({ length: cols }, () => isDark ? Math.random() < 0.55 : false)
+      rainCloudRow = new Array(cols).fill(-1)
+      rainCols     = Array.from({ length: cols }, () => ({
         leadY:    Math.random() * rows * 1.2 - rows * 0.15,   // stagger: some already falling
         speed:    18 + Math.random() * 16,
         trailLen: 2 + Math.floor(Math.random() * 3),
       }))
       rainSplash = []
+    }
+
+    // ── Sky background init ────────────────────────────────────────────────────
+    function initSky() {
+      skyDarkStars   = []
+      skyDarkMoon    = []
+      skyLightClouds = []
+      skyLightBirds  = []
+      skyLightSun    = []
+
+      function pushLines(arr: SC[], ox: number, oy: number, lines: string[]) {
+        for (let li = 0; li < lines.length; li++) {
+          for (let ci = 0; ci < lines[li].length; ci++) {
+            const ch = lines[li][ci]
+            if (ch !== ' ') arr.push({ x: ox + ci * CELL_W, y: oy + li * CELL_H, ch })
+          }
+        }
+      }
+      function makeCloud(cx: number, cy: number, lines: string[], vx: number): SkyCloud {
+        const cells: SC[] = []
+        pushLines(cells, cx, cy, lines)
+        return { cells, baseX: cx, ox: 0, vx }
+      }
+
+      // Dark: randomly scattered stars — top sky band only, clear of platforms
+      for (let i = 0; i < 65; i++) {
+        skyDarkStars.push({
+          x:  Math.random() * W,
+          y:  H * 0.04 + Math.random() * (H * 0.34),  // H*0.04–0.38, above high platforms (H*0.46)
+          ch: Math.random() < 0.15 ? '*' : '.',
+        })
+      }
+
+      // Dark: sliver crescent moon (upper right)
+      //   (      ← top arc, offset right
+      //  ( .     ← middle bulge, leftmost point + glint
+      //   (      ← bottom arc, offset right
+      const moonX = Math.floor(W * 0.80), moonY = Math.floor(H * 0.09)
+      skyDarkMoon.push({ x: moonX + CELL_W,     y: moonY,              ch: '(' })
+      skyDarkMoon.push({ x: moonX,              y: moonY + CELL_H,     ch: '(' })
+      skyDarkMoon.push({ x: moonX + CELL_W * 2, y: moonY + CELL_H,     ch: '.' })
+      skyDarkMoon.push({ x: moonX + CELL_W,     y: moonY + CELL_H * 2, ch: '(' })
+
+      // Light: clouds — bubbly round style, varied sizes + drift speeds for depth
+      // L = large/close (double-bump), M = medium, S = small/distant
+      // vx in px/s: slower = feels farther away
+      skyLightClouds = [
+        makeCloud(Math.floor(W * 0.02), Math.floor(H * 0.18), [  // Far left, upper — L, slow
+          '   ___   __',
+          ' _(   )_(  )',
+          '(___)___)_)',
+        ], 3),                                                     // → right, slow
+        makeCloud(Math.floor(W * 0.47), Math.floor(H * 0.17), [  // Upper center-right — M
+          '   ___',
+          ' _(   )',
+          '(___)__)',
+        ], -5),                                                    // ← left
+        makeCloud(Math.floor(W * 0.08), Math.floor(H * 0.30), [  // Left, mid-sky — M
+          '   ___',
+          ' _(   )',
+          '(___)__)',
+        ], 4),                                                     // → right
+        makeCloud(Math.floor(W * 0.36), Math.floor(H * 0.28), [  // Center, mid-sky — L
+          '   ___   __',
+          ' _(   )_(  )',
+          '(___)___)_)',
+        ], -3),                                                    // ← left, slow
+        makeCloud(Math.floor(W * 0.70), Math.floor(H * 0.24), [  // Right, mid-sky — M
+          '   ___',
+          ' _(   )',
+          '(___)__)',
+        ], 6),                                                     // → right
+        makeCloud(Math.floor(W * 0.83), Math.floor(H * 0.35), [  // Far right, lower — S
+          '  __',
+          '_(  )',
+          '(_)_)',
+        ], -8),                                                    // ← left, fastest
+      ]
+
+      // Light: birds — -.- style, loosely scattered, clear of platforms (H*0.46)
+      const birdSpots: Array<[number, number]> = [
+        [W * 0.73, H * 0.20 + Math.random() * 8],
+        [W * 0.14, H * 0.35 + Math.random() * 8],
+        [W * 0.22, H * 0.38 + Math.random() * 6],
+      ]
+      for (const [bx, by] of birdSpots) skyLightBirds.push({ x: bx, y: by, ch: '-.-' })
     }
 
     // ── Resize ──────────────────────────────────────────────────────────────────
@@ -1308,6 +1408,27 @@ export default function SignalField({ mode, effect }: Props) {
       c2d.font = FONT
       c2d.textBaseline = 'top'
 
+      // ── Sky background ─────────────────────────────────────────────────────
+      if (dark) {
+        c2d.fillStyle = 'rgba(255,255,255,0.08)'
+        for (const s of skyDarkStars)   c2d.fillText(s.ch, s.x, s.y)
+        c2d.fillStyle = 'rgba(255,255,255,0.22)'
+        for (const s of skyDarkMoon)    c2d.fillText(s.ch, s.x, s.y)
+      } else {
+        // Drift clouds, wrap at both edges
+        for (const cloud of skyLightClouds) {
+          cloud.ox += cloud.vx * dt
+          if (cloud.baseX + cloud.ox > W + 200)  cloud.ox -= W + 400
+          if (cloud.baseX + cloud.ox < -200)      cloud.ox += W + 400
+        }
+        c2d.fillStyle = 'rgba(30,30,30,0.42)'
+        for (const cloud of skyLightClouds) {
+          for (const s of cloud.cells) c2d.fillText(s.ch, s.x + cloud.ox, s.y)
+        }
+        c2d.fillStyle = 'rgba(30,30,30,0.48)'
+        for (const s of skyLightBirds)  c2d.fillText(s.ch, s.x, s.y)
+      }
+
       const eff = effectRef.current
 
       // ── Stars: shooting stars arc behind bots ────────────────────────────────
@@ -1501,6 +1622,32 @@ export default function SignalField({ mode, effect }: Props) {
           c2d.fillText(p.ch, p.x, p.y)
         }
 
+        // Light mode: sync rainActive with current cloud positions each frame
+        if (!dark) {
+          rainCloudRow.fill(-1)
+          for (const cloud of skyLightClouds) {
+            let maxY = 0, minX = Infinity, maxX = -Infinity
+            for (const cell of cloud.cells) {
+              const ax = cell.x + cloud.ox
+              if (ax < minX) minX = ax
+              if (ax > maxX) maxX = ax
+              if (cell.y > maxY) maxY = cell.y
+            }
+            const bottomRow = Math.floor(maxY / CELL_H) + 5  // ~90px gap beneath cloud
+            const c0 = Math.max(0, Math.floor(minX / CELL_W))
+            const c1 = Math.min(cols - 1, Math.ceil(maxX / CELL_W))
+            for (let c = c0; c <= c1; c++) rainCloudRow[c] = bottomRow
+          }
+          for (let c = 0; c < cols; c++) {
+            if (rainCloudRow[c] >= 0 && !rainActive[c] && Math.random() < 0.40) {
+              rainActive[c]      = true
+              rainCols[c].leadY  = rainCloudRow[c]
+            } else if (rainCloudRow[c] < 0 && rainActive[c]) {
+              rainActive[c] = false
+            }
+          }
+        }
+
         // Update + render rain drops
         for (let ci = 0; ci < rainCols.length; ci++) {
           if (!rainActive[ci]) continue
@@ -1527,7 +1674,9 @@ export default function SignalField({ mode, effect }: Props) {
                   })
                 }
               }
-              col.leadY = -(1 + Math.random() * rows * 0.6)
+              col.leadY = (!dark && rainCloudRow[ci] >= 0)
+                ? rainCloudRow[ci]
+                : -(1 + Math.random() * rows * 0.6)
               splashed  = true
               break
             }
@@ -1548,7 +1697,9 @@ export default function SignalField({ mode, effect }: Props) {
                   ch:   Math.random() < 0.5 ? "'" : '.',
                 })
               }
-              col.leadY = -(1 + Math.random() * rows * 0.6)
+              col.leadY = (!dark && rainCloudRow[ci] >= 0)
+                ? rainCloudRow[ci]
+                : -(1 + Math.random() * rows * 0.6)
               hitBot    = true
               break
             }
@@ -1557,7 +1708,9 @@ export default function SignalField({ mode, effect }: Props) {
 
           // Reset when fully off screen
           if (col.leadY - col.trailLen > rows) {
-            col.leadY    = -(1 + Math.random() * 4)
+            col.leadY    = (!dark && rainCloudRow[ci] >= 0)
+              ? rainCloudRow[ci]
+              : -(1 + Math.random() * 4)
             col.speed    = 18 + Math.random() * 16
             col.trailLen = 2 + Math.floor(Math.random() * 3)
           }
@@ -1569,7 +1722,7 @@ export default function SignalField({ mode, effect }: Props) {
             if (row < 0 || row >= rows) continue
             const cy        = row * CELL_H
             const progress  = 1 - i / col.trailLen
-            const baseAlpha = dark ? 0.04 + progress * 0.26 : 0.03 + progress * 0.18
+            const baseAlpha = dark ? 0.04 + progress * 0.26 : 0.02 + progress * 0.10
             const ch        = i === 0 ? '|' : i === 1 ? "'" : '.'
             c2d.fillStyle   = dark
               ? `rgba(255,255,255,${baseAlpha})`
@@ -1653,7 +1806,7 @@ export default function SignalField({ mode, effect }: Props) {
   // Bots mode: extend the visible band lower so buddies on the ground platform
   // (H*0.88) are fully opaque — fade doesn't start until 90%.
   const maskGrad = mode === 'bots'
-    ? 'linear-gradient(to bottom, transparent 8%, black 22%, black 90%, transparent 100%)'
+    ? 'linear-gradient(to bottom, transparent 5%, black 15%, black 90%, transparent 100%)'
     : 'linear-gradient(to bottom, transparent 10%, black 28%, black 72%, transparent 92%)'
 
   return (
