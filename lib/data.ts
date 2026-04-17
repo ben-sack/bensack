@@ -5,7 +5,7 @@ export const resume = {
   name: 'Ben Sack',
   location: 'Venice, CA',
   summary:
-    'Engineer focused on building reliable systems and making complex things easier to run.',
+    'Engineer focused on building. reliable systems and making complex things easier to run.',
   contact: {
     email: 'contact@bensack.io',
     github: 'https://github.com/ben-sack',

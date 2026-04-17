@@ -603,6 +603,11 @@ export default function SignalField({ mode }: Props) {
     let groundProps:  GroundProp[]          = []
     let particles:    Particle[]            = []
 
+    // ── Shooting stars (city mode) ─────────────────────────────────────────────
+    let shootStars: Array<{ x: number; y: number; vx: number; vy: number; bright: number }> = []
+    let cityBursts: Particle[] = []
+    let shootTimer  = 0
+
     // ── Buddy pixel dimensions (used in physics, hit-testing, and rendering) ──
     const BW = 84         // approx rendered width of a 12-char buddy line
     const BH = 5 * CELL_H // total sprite height (5 lines × CELL_H px)
@@ -636,6 +641,8 @@ export default function SignalField({ mode }: Props) {
     function initCity(now: number) {
       invalidateSceneCache()
       conLastSwitch = now
+      shootStars = []
+      shootTimer = 1 + Math.random() * 3   // first star appears quickly
       if (!cachedCity) cachedCity = generateCity(cols, rows)
       const scene = cachedCity
       conStars = scene.map(cell => ({
@@ -890,7 +897,7 @@ export default function SignalField({ mode }: Props) {
     // ── Draw: city ──────────────────────────────────────────────────────────────
     // Spring-physics stars converge to city ASCII art. Mouse repels stars.
     // Three alpha passes to minimise fillStyle calls.
-    function drawCity(now: number) {
+    function drawCity(now: number, dt: number) {
       const mx   = mouseRef.current.x
       const my   = mouseRef.current.y
       const dark = isDarkRef.current
@@ -948,6 +955,64 @@ export default function SignalField({ mode }: Props) {
         }
       }
 
+      // ── Shooting stars — rendered BEFORE city passes so buildings overdraw them,
+      //    creating the illusion they fly behind the skyline. ────────────────────
+      shootTimer -= dt
+      if (shootTimer <= 0) {
+        shootTimer = 3 + Math.random() * 7
+        const dir   = Math.random() < 0.85 ? 1 : -1
+        const speed = 240 + Math.random() * 200
+        const angle = (16 + Math.random() * 24) * Math.PI / 180
+        shootStars.push({
+          x:      dir > 0 ? Math.random() * W * 0.45 : W * (0.55 + Math.random() * 0.5),
+          y:      H * 0.04 + Math.random() * H * 0.28,
+          vx:     dir * speed * Math.cos(angle),
+          vy:     speed * Math.sin(angle),
+          bright: 0.55 + Math.random() * 0.35,
+        })
+      }
+
+      const TRAIL_LEN  = 9
+      const TRAIL_STEP = 11
+      for (let si = shootStars.length - 1; si >= 0; si--) {
+        const s = shootStars[si]
+        s.x += s.vx * dt
+        s.y += s.vy * dt
+
+        const hitGround = s.y > H * 0.62
+        const offScreen = s.x > W + 80 || s.x < -80
+
+        if (hitGround) {
+          // Explode — emit burst particles into cityBursts (rendered in front)
+          for (let p = 0; p < 13; p++) {
+            const a = Math.PI * (0.3 + Math.random() * 1.4)  // upward-biased spread
+            const spd2 = p < 4 ? 80 + Math.random() * 110 : 25 + Math.random() * 55
+            cityBursts.push({
+              x: s.x, y: s.y,
+              vx: Math.cos(a) * spd2,
+              vy: Math.sin(a) * spd2 - 25,
+              life: 1.0,
+              ch: p < 4 ? '*' : p < 8 ? "'" : '·',
+            })
+          }
+          shootStars.splice(si, 1); continue
+        }
+        if (offScreen) { shootStars.splice(si, 1); continue }
+
+        const spd = Math.sqrt(s.vx * s.vx + s.vy * s.vy)
+        const nx  = s.vx / spd
+        const ny  = s.vy / spd
+        c2d.fillStyle = dark ? `rgba(255,255,255,${s.bright})` : `rgba(30,30,30,${s.bright * 0.85})`
+        c2d.fillText('*', s.x, s.y)
+        for (let j = 1; j <= TRAIL_LEN; j++) {
+          const ta = s.bright * (1 - j / TRAIL_LEN) * 0.80
+          if (ta < 0.02) continue
+          c2d.fillStyle = dark ? `rgba(255,255,255,${ta})` : `rgba(30,30,30,${ta * 0.85})`
+          c2d.fillText(j <= 2 ? '-' : '·', s.x - nx * TRAIL_STEP * j, s.y - ny * TRAIL_STEP * j)
+        }
+      }
+
+      // ── City characters — overdraw shooting stars, placing buildings in front ─
       // Far pass – dim
       if (farBucket.length > 0) {
         c2d.fillStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(30,30,30,0.09)'
@@ -962,6 +1027,19 @@ export default function SignalField({ mode }: Props) {
       if (nearBucket.length > 0) {
         c2d.fillStyle = dark ? 'rgba(255,255,255,0.62)' : 'rgba(30,30,30,0.48)'
         for (const { x, y, ch } of nearBucket) c2d.fillText(ch, x, y)
+      }
+
+      // ── Explosion bursts — rendered AFTER city passes so they appear in front ─
+      for (let pi = cityBursts.length - 1; pi >= 0; pi--) {
+        const p = cityBursts[pi]
+        p.x    += p.vx * dt
+        p.y    += p.vy * dt
+        p.vy   += 220 * dt   // gravity
+        p.life -= dt * 2.0
+        if (p.life <= 0) { cityBursts.splice(pi, 1); continue }
+        const alpha = (dark ? 0.80 : 0.68) * p.life
+        c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+        c2d.fillText(p.ch, p.x, p.y)
       }
     }
 
@@ -1327,6 +1405,7 @@ export default function SignalField({ mode }: Props) {
           particles.length = 0
           document.body.style.cursor = ''
         }
+        if (prevMode === 'city') { shootStars = []; cityBursts = [] }
         prevMode = m
         if (m === 'rain') initRain()
         if (m === 'city') initCity(now)
@@ -1336,7 +1415,7 @@ export default function SignalField({ mode }: Props) {
 
       if      (m === 'density' || m === 'waves') drawField(t)
       else if (m === 'rain')                      drawRain(dt)
-      else if (m === 'city')                      drawCity(now)
+      else if (m === 'city')                      drawCity(now, dt)
       else if (m === 'surf')                      drawSurf()
       else if (m === 'bots')                      drawBots(dt, now)
 
