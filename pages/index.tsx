@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import SEO from '../components/SEO'
-import SignalField from '../components/SignalField'
+import SignalField, { type FieldMode } from '../components/SignalField'
+
+const MODES: { id: FieldMode; label: string }[] = [
+  { id: 'density', label: 'field' },
+  { id: 'waves',   label: 'waves' },
+  { id: 'rain',    label: 'rain'  },
+  { id: 'city',    label: 'city'  },
+  { id: 'bots',    label: 'bots'  },
+]
 
 // ─── Letter shuffle ────────────────────────────────────────────────────────
 function shuffleLetters(el: HTMLElement, options: { iterations?: number } = {}) {
@@ -139,6 +147,8 @@ function TimeLocation() {
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
+  const [mode, setMode] = useState<FieldMode>('density')
+
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
@@ -148,7 +158,7 @@ export default function Home() {
     <>
       <SEO description="Engineer. Maker. Venice." />
 
-      <SignalField />
+      <SignalField mode={mode} />
 
       <div style={{
         position:  'fixed',
@@ -180,6 +190,35 @@ export default function Home() {
             . previously at disney.
           </p>
           <h1 className="vh">Ben Sack — Engineer building reliable systems. Currently at Databricks.</h1>
+
+          {/* animation picker — temporary, remove once design is chosen */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
+            <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em' }}>
+              animation
+            </span>
+            {MODES.map(({ id, label }, i) => (
+              <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
+                <button
+                  onClick={() => setMode(id)}
+                  style={{
+                    fontSize:       11,
+                    fontFamily:     'var(--fonts-body)',
+                    textTransform:  'lowercase',
+                    letterSpacing:  '0.02em',
+                    color:          mode === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                    background:     'transparent',
+                    border:         0,
+                    cursor:         'pointer',
+                    padding:        0,
+                    transition:     'color 150ms ease',
+                  }}
+                >
+                  {label}
+                </button>
+              </span>
+            ))}
+          </div>
       </div>
     </>
   )
