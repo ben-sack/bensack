@@ -216,6 +216,7 @@ interface BuddyState {
 interface Platform   { x: number; y: number; w: number }
 interface GroundProp { x: number; lines: string[] }
 interface Particle   { x: number; y: number; vx: number; vy: number; life: number; ch: string }
+interface Portal     { x: number; platY: number; animFrame: number; animTimer: number }
 
 // Mirror a single ASCII line so buddies face left
 function mirrorLine(line: string): string {
@@ -601,10 +602,16 @@ export default function SignalField({ mode, effect }: Props) {
     let rainCols:     RainCol[]             = []
     let conStars:     ConstellationStar[]   = []
     let conLastSwitch = 0
-    let buddies:      BuddyState[]          = []
-    let platforms:    Platform[]            = []
-    let groundProps:  GroundProp[]          = []
-    let particles:    Particle[]            = []
+    let buddies:        BuddyState[]          = []
+    let platforms:      Platform[]            = []
+    let groundProps:    GroundProp[]          = []
+    let particles:      Particle[]            = []
+    let portal:         Portal | null         = null
+    let portalCooldown: number[]              = []
+
+    // Vertical portal seam — sine-wave shape: ( | ) | cycling creates a flowing curve
+    const PORTAL_WAVE = ['(', '|', ')', '|'] as const
+    const PORTAL_ROWS = 5    // seam height in cells
 
     // ── Shooting stars (city mode + night overlay) ────────────────────────────
     let shootStars: Array<{ x: number; y: number; vx: number; vy: number; bright: number }> = []
@@ -707,9 +714,19 @@ export default function SignalField({ mode, effect }: Props) {
       }))
     }
 
+    function setupPortal() {
+      portal = {
+        x:         W - CELL_W,               // flush with right wall
+        platY:     Math.floor(H * 0.88),      // ground platform y
+        animFrame: 0,
+        animTimer: 0.38,
+      }
+    }
+
     function initBots() {
       setupPlatforms()
       setupGroundProps()
+      setupPortal()
       initSky()
       particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
@@ -740,6 +757,7 @@ export default function SignalField({ mode, effect }: Props) {
           bubble:        null,
         }
       })
+      portalCooldown = new Array(buddies.length).fill(0)
     }
 
     // ── Stars overlay init ─────────────────────────────────────────────────────
@@ -1333,9 +1351,24 @@ export default function SignalField({ mode, effect }: Props) {
         b.x += b.vx * dt
         b.y += b.vy * dt
 
-        // Horizontal wall bounce
-        if (b.x < 0)      { b.x = 0;      b.vx =  Math.abs(b.vx) * 0.6; b.facing =  1 }
-        if (b.x + BW > W) { b.x = W - BW; b.vx = -Math.abs(b.vx) * 0.6; b.facing = -1 }
+        // Horizontal wall bounce / portal
+        if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx) * 0.6; b.facing = 1 }
+        if (b.x + BW > W) {
+          if (portal && b.onGround && portalCooldown[i] <= 0) {
+            // Walk into the right-wall portal → fall from sky onto a high platform
+            const highPlats = platforms.filter(p => p.y <= H * 0.50)
+            const tgt = highPlats[Math.floor(Math.random() * highPlats.length)]
+            b.x        = tgt.x + Math.random() * Math.max(0, tgt.w - BW)
+            b.y        = -(BH + CELL_H * 3)
+            b.vx       = (Math.random() - 0.5) * 40
+            b.vy       = 60
+            b.state    = 'airborne'
+            b.onGround = false
+            portalCooldown[i] = 8
+          } else {
+            b.x = W - BW; b.vx = -Math.abs(b.vx) * 0.6; b.facing = -1
+          }
+        }
         // Ceiling
         if (b.y < 0)      { b.y = 0; b.vy = Math.abs(b.vy) * 0.4 }
 
@@ -1376,6 +1409,9 @@ export default function SignalField({ mode, effect }: Props) {
           if (b.state === 'sleep') b.sleepPhase = 0   // wake up if sleeping
           b.state = 'airborne'
         }
+
+        // Tick portal cooldown
+        if (portalCooldown[i] > 0) portalCooldown[i] -= dt
       }
 
       // ── Greet detection ────────────────────────────────────────────────────
@@ -1400,6 +1436,17 @@ export default function SignalField({ mode, effect }: Props) {
             if (!bi.bubble) bi.bubble = { text: pick(), life: BUBBLE_LIFE }
             if (!bj.bubble) bj.bubble = { text: pick(), life: BUBBLE_LIFE }
           }
+        }
+      }
+
+      // ── Portal proximity ───────────────────────────────────────────────────
+      // Binary: true only when a ground bot is within a few px of the right wall
+      const PROX_DIST = 28   // px from right wall
+      let portalProximity = 0
+      if (portal) {
+        for (const b of buddies) {
+          if (!b.onGround) continue
+          if (W - (b.x + BW) < PROX_DIST) { portalProximity = 1; break }
         }
       }
 
@@ -1591,6 +1638,23 @@ export default function SignalField({ mode, effect }: Props) {
         c2d.textAlign = 'center'
       }
       c2d.textAlign = 'left'  // restore default
+
+      // ── Portal — invisible at rest, ripples as a bot approaches ────────────
+      if (portal && portalProximity > 0.01) {
+        // Animation ticks faster the closer the bot is
+        portal.animTimer -= dt * 4
+        if (portal.animTimer <= 0) {
+          portal.animFrame  = (portal.animFrame + 1) % PORTAL_WAVE.length
+          portal.animTimer  = 0.38
+        }
+        const alpha = dark ? 0.55 : 0.44
+        c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+        for (let r = 0; r < PORTAL_ROWS; r++) {
+          const ch = PORTAL_WAVE[(r + portal.animFrame) % PORTAL_WAVE.length]
+          const py = portal.platY - (PORTAL_ROWS - r) * CELL_H
+          c2d.fillText(ch, portal.x, py)
+        }
+      }
 
       // ── Stars: explosion bursts in front of bots ────────────────────────────
       if (eff === 'stars') {
