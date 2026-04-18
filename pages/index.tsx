@@ -145,6 +145,14 @@ function TimeLocation() {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [effect, setEffect] = useState<BotEffect>('none')
+  const [mobile, setMobile]  = useState(false)
+
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < 640)
+    check()
+    window.addEventListener('resize', check, { passive: true })
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -170,8 +178,8 @@ export default function Home() {
           <p
             style={{
               color:         'var(--colors-gray12)',
-              fontSize:       25,
-              lineHeight:    '35px',
+              fontSize:       mobile ? 18 : 25,
+              lineHeight:     mobile ? '27px' : '35px',
               letterSpacing: '-0.5px',
               textTransform: 'lowercase',
               fontFamily:    'var(--fonts-body)',
@@ -206,7 +214,8 @@ export default function Home() {
                     background:     'transparent',
                     border:         0,
                     cursor:         'pointer',
-                    padding:        0,
+                    padding:        mobile ? '8px 6px' : 0,
+                    margin:         mobile ? '-8px -6px' : 0,
                     transition:     'color 150ms ease',
                   }}
                 >

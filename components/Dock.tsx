@@ -106,6 +106,7 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
   const y = useSpring(0, jumpSpring)
 
   async function handleClick() {
+    setHovered(false)
     if (href) {
       if (href.startsWith('/')) {
         router.push(href, undefined, { scroll: false })
@@ -139,8 +140,8 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
   return (
     <motion.div
       style={{ position: 'relative' }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHovered(true) }}
+      onPointerLeave={() => setHovered(false)}
     >
       <AnimatePresence>
         {hovered && (

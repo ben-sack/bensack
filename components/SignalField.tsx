@@ -214,7 +214,7 @@ interface BuddyState {
 }
 
 interface Platform   { x: number; y: number; w: number }
-interface GroundProp { x: number; lines: string[] }
+interface GroundProp { x: number; lines: string[]; platY?: number }
 interface Particle   { x: number; y: number; vx: number; vy: number; life: number; ch: string }
 interface Portal     { x: number; platY: number; animFrame: number; animTimer: number }
 
@@ -596,6 +596,11 @@ export default function SignalField({ mode, effect }: Props) {
     const c2d = ctx    as CanvasRenderingContext2D
 
     let W = 0, H = 0, cols = 0, rows = 0, animId = 0
+    // Scaled per viewport — updated in resize() before anything else
+    // eslint-disable-next-line no-shadow
+    let CELL_W = 11, CELL_H = 18
+    // eslint-disable-next-line no-shadow
+    let FONT = '12px Menlo, "Courier New", monospace'
     let prevMode: FieldMode = modeRef.current
 
     // ── Mode state ─────────────────────────────────────────────────────────────
@@ -634,8 +639,8 @@ export default function SignalField({ mode, effect }: Props) {
     let skyLightSun:    SC[] = []
 
     // ── Buddy pixel dimensions (used in physics, hit-testing, and rendering) ──
-    const BW = 84         // approx rendered width of a 12-char buddy line
-    const BH = 5 * CELL_H // total sprite height (5 lines × CELL_H px)
+    let BW = 84         // approx rendered width of a 12-char buddy line
+    let BH = 5 * CELL_H // total sprite height (5 lines × CELL_H px)
 
     // ── Drag state ─────────────────────────────────────────────────────────────
     let dragIdx  = -1   // index of buddy being dragged  (-1 = none)
@@ -687,31 +692,47 @@ export default function SignalField({ mode, effect }: Props) {
     // Ground sits near true viewport bottom; elevated tiers are spaced ≤112 px
     // apart so buddies can always jump between them (max jump height ≈ 126 px).
     function setupPlatforms() {
-      platforms = [
-        // Ground — full width, near true viewport bottom
-        { x: 0,                    y: Math.floor(H * 0.88), w: W },
-        // Lower tier  (~112 px above ground)
-        { x: Math.floor(W * 0.02), y: Math.floor(H * 0.74), w: Math.floor(W * 0.22) },
-        { x: Math.floor(W * 0.62), y: Math.floor(H * 0.74), w: Math.floor(W * 0.20) },
-        // Mid tier    (~112 px above lower)
-        { x: Math.floor(W * 0.22), y: Math.floor(H * 0.60), w: Math.floor(W * 0.22) },
-        { x: Math.floor(W * 0.44), y: Math.floor(H * 0.60), w: Math.floor(W * 0.18) },
-        { x: Math.floor(W * 0.76), y: Math.floor(H * 0.60), w: Math.floor(W * 0.16) },
-        // High perches (~112 px above mid)
-        { x: Math.floor(W * 0.08), y: Math.floor(H * 0.46), w: Math.floor(W * 0.18) },
-        { x: Math.floor(W * 0.40), y: Math.floor(H * 0.46), w: Math.floor(W * 0.16) },
-        { x: Math.floor(W * 0.74), y: Math.floor(H * 0.46), w: Math.floor(W * 0.18) },
-      ]
+      if (W < 640) {
+        // Mobile: ground only — bots walk along the bottom like on a dock
+        platforms = [
+          { x: 0, y: Math.floor(H * 0.88), w: W },
+        ]
+      } else {
+        platforms = [
+          // Ground — full width, near true viewport bottom
+          { x: 0,                    y: Math.floor(H * 0.88), w: W },
+          // Lower tier  (~112 px above ground)
+          { x: Math.floor(W * 0.02), y: Math.floor(H * 0.74), w: Math.floor(W * 0.22) },
+          { x: Math.floor(W * 0.62), y: Math.floor(H * 0.74), w: Math.floor(W * 0.20) },
+          // Mid tier    (~112 px above lower)
+          { x: Math.floor(W * 0.22), y: Math.floor(H * 0.60), w: Math.floor(W * 0.22) },
+          { x: Math.floor(W * 0.44), y: Math.floor(H * 0.60), w: Math.floor(W * 0.18) },
+          { x: Math.floor(W * 0.76), y: Math.floor(H * 0.60), w: Math.floor(W * 0.16) },
+          // High perches (~112 px above mid)
+          { x: Math.floor(W * 0.08), y: Math.floor(H * 0.46), w: Math.floor(W * 0.18) },
+          { x: Math.floor(W * 0.40), y: Math.floor(H * 0.46), w: Math.floor(W * 0.16) },
+          { x: Math.floor(W * 0.74), y: Math.floor(H * 0.46), w: Math.floor(W * 0.18) },
+        ]
+      }
     }
 
-    // Scatter decorative props evenly along the ground platform.
+    // Scatter decorative props along the ground (desktop) or elevated platforms (mobile).
     function setupGroundProps() {
-      if (platforms.length === 0) return
-      const positions = [0.06, 0.17, 0.30, 0.47, 0.63, 0.77, 0.91]
-      groundProps = positions.map((frac, i) => ({
-        x:     Math.floor(W * frac),
-        lines: PROP_TEMPLATES[i % PROP_TEMPLATES.length],
-      }))
+      if (platforms.length === 0) { groundProps = []; return }
+      if (W < 640) {
+        // On mobile: one small prop centered on each elevated platform (skip ground)
+        groundProps = platforms.slice(1).map((p, i) => ({
+          x:     Math.floor(p.x + p.w / 2) - CELL_W,
+          lines: PROP_TEMPLATES[i % PROP_TEMPLATES.length],
+          platY: p.y,
+        }))
+      } else {
+        const positions = [0.06, 0.17, 0.30, 0.47, 0.63, 0.77, 0.91]
+        groundProps = positions.map((frac, i) => ({
+          x:     Math.floor(W * frac),
+          lines: PROP_TEMPLATES[i % PROP_TEMPLATES.length],
+        }))
+      }
     }
 
     function setupPortal() {
@@ -730,10 +751,10 @@ export default function SignalField({ mode, effect }: Props) {
       initSky()
       particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
-      const COUNT    = Math.min(12, SPECIES.length)
+      const COUNT    = Math.min(W < 640 ? 2 : 12, SPECIES.length)
       const shuffled = [...SPECIES].sort(() => Math.random() - 0.5)
-      // Exclude ground platform for initial placement (index 0)
-      const spawnPlats = platforms.slice(1)
+      // Prefer elevated platforms for spawn; fall back to ground if none exist (mobile)
+      const spawnPlats = platforms.length > 1 ? platforms.slice(1) : platforms
       buddies = Array.from({ length: COUNT }, (_, i) => {
         const plat = spawnPlats[i % spawnPlats.length]
         const xPos = plat.x + Math.random() * Math.max(0, plat.w - BW)
@@ -825,45 +846,71 @@ export default function SignalField({ mode, effect }: Props) {
       // Light: clouds — bubbly round style, varied sizes + drift speeds for depth
       // L = large/close (double-bump), M = medium, S = small/distant
       // vx in px/s: slower = feels farther away
-      skyLightClouds = [
-        makeCloud(Math.floor(W * 0.02), Math.floor(H * 0.18), [  // Far left, upper — L, slow
-          '   ___   __',
-          ' _(   )_(  )',
-          '(___)___)_)',
-        ], 3),                                                     // → right, slow
-        makeCloud(Math.floor(W * 0.47), Math.floor(H * 0.17), [  // Upper center-right — M
-          '   ___',
-          ' _(   )',
-          '(___)__)',
-        ], -5),                                                    // ← left
-        makeCloud(Math.floor(W * 0.08), Math.floor(H * 0.30), [  // Left, mid-sky — M
-          '   ___',
-          ' _(   )',
-          '(___)__)',
-        ], 4),                                                     // → right
-        makeCloud(Math.floor(W * 0.36), Math.floor(H * 0.28), [  // Center, mid-sky — L
-          '   ___   __',
-          ' _(   )_(  )',
-          '(___)___)_)',
-        ], -3),                                                    // ← left, slow
-        makeCloud(Math.floor(W * 0.70), Math.floor(H * 0.24), [  // Right, mid-sky — M
-          '   ___',
-          ' _(   )',
-          '(___)__)',
-        ], 6),                                                     // → right
-        makeCloud(Math.floor(W * 0.83), Math.floor(H * 0.35), [  // Far right, lower — S
-          '  __',
-          '_(  )',
-          '(_)_)',
-        ], -8),                                                    // ← left, fastest
-      ]
+      if (W < 640) {
+        // Mobile: 3 clouds, all below the bio text (≥ H*0.42)
+        skyLightClouds = [
+          makeCloud(Math.floor(W * 0.04), Math.floor(H * 0.44), [  // Left — M
+            '   ___',
+            ' _(   )',
+            '(___)__)',
+          ], 4),
+          makeCloud(Math.floor(W * 0.58), Math.floor(H * 0.42), [  // Right — S
+            '  __',
+            '_(  )',
+            '(_)_)',
+          ], -5),
+          makeCloud(Math.floor(W * 0.28), Math.floor(H * 0.53), [  // Center-low — M
+            '   ___',
+            ' _(   )',
+            '(___)__)',
+          ], 3),
+        ]
+      } else {
+        skyLightClouds = [
+          makeCloud(Math.floor(W * 0.02), Math.floor(H * 0.18), [  // Far left, upper — L, slow
+            '   ___   __',
+            ' _(   )_(  )',
+            '(___)___)_)',
+          ], 3),                                                     // → right, slow
+          makeCloud(Math.floor(W * 0.47), Math.floor(H * 0.17), [  // Upper center-right — M
+            '   ___',
+            ' _(   )',
+            '(___)__)',
+          ], -5),                                                    // ← left
+          makeCloud(Math.floor(W * 0.08), Math.floor(H * 0.30), [  // Left, mid-sky — M
+            '   ___',
+            ' _(   )',
+            '(___)__)',
+          ], 4),                                                     // → right
+          makeCloud(Math.floor(W * 0.36), Math.floor(H * 0.28), [  // Center, mid-sky — L
+            '   ___   __',
+            ' _(   )_(  )',
+            '(___)___)_)',
+          ], -3),                                                    // ← left, slow
+          makeCloud(Math.floor(W * 0.70), Math.floor(H * 0.24), [  // Right, mid-sky — M
+            '   ___',
+            ' _(   )',
+            '(___)__)',
+          ], 6),                                                     // → right
+          makeCloud(Math.floor(W * 0.83), Math.floor(H * 0.35), [  // Far right, lower — S
+            '  __',
+            '_(  )',
+            '(_)_)',
+          ], -8),                                                    // ← left, fastest
+        ]
+      }
 
-      // Light: birds — -.- style, loosely scattered, clear of platforms (H*0.46)
-      const birdSpots: Array<[number, number]> = [
-        [W * 0.73, H * 0.20 + Math.random() * 8],
-        [W * 0.14, H * 0.35 + Math.random() * 8],
-        [W * 0.22, H * 0.38 + Math.random() * 6],
-      ]
+      // Light: birds — -.- style, loosely scattered, clear of platforms
+      const birdSpots: Array<[number, number]> = W < 640
+        ? [
+            [W * 0.72, H * 0.48 + Math.random() * 6],
+            [W * 0.12, H * 0.56 + Math.random() * 6],
+          ]
+        : [
+            [W * 0.73, H * 0.20 + Math.random() * 8],
+            [W * 0.14, H * 0.35 + Math.random() * 8],
+            [W * 0.22, H * 0.38 + Math.random() * 6],
+          ]
       for (const [bx, by] of birdSpots) skyLightBirds.push({ x: bx, y: by, ch: '-.-' })
     }
 
@@ -872,6 +919,12 @@ export default function SignalField({ mode, effect }: Props) {
       const dpr = window.devicePixelRatio || 1
       W = window.innerWidth
       H = window.innerHeight
+      // Scale cell size and font down on mobile so ASCII art isn't huge
+      CELL_W = W < 640 ? 7  : 11
+      CELL_H = W < 640 ? 12 : 18
+      FONT   = W < 640 ? '8px Menlo, "Courier New", monospace' : '12px Menlo, "Courier New", monospace'
+      BW     = W < 640 ? 56 : 84
+      BH     = 5 * CELL_H
       cols = Math.ceil(W / CELL_W) + 1
       rows = Math.ceil(H / CELL_H) + 1
       el.width  = Math.round(W * dpr)
@@ -941,11 +994,67 @@ export default function SignalField({ mode, effect }: Props) {
       document.body.style.cursor = ''
     }
 
+    const onTouchStart = (e: TouchEvent) => {
+      if (modeRef.current !== 'bots') return
+      const t = e.touches[0]
+      const mx = t.clientX, my = t.clientY
+      mouseRef.current = { x: mx, y: my }
+      // Expand hit area for fingers on mobile
+      const slop = W < 640 ? 24 : 0
+      for (let i = 0; i < buddies.length; i++) {
+        const b = buddies[i]
+        if (mx >= b.x - slop && mx <= b.x + BW + slop &&
+            my >= b.y - slop && my <= b.y + BH + slop) {
+          dragIdx  = i
+          dragOffX = mx - b.x
+          dragOffY = my - b.y
+          dragHistory.length = 0
+          dragHistory.push({ x: mx, y: my, t: performance.now() })
+          b.state = 'airborne'
+          b.vx = 0; b.vy = 0
+          e.preventDefault()
+          break
+        }
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 0) return
+      const t = e.touches[0]
+      mouseRef.current = { x: t.clientX, y: t.clientY }
+      if (dragIdx >= 0) {
+        dragHistory.push({ x: t.clientX, y: t.clientY, t: performance.now() })
+        if (dragHistory.length > 6) dragHistory.shift()
+        e.preventDefault()
+      }
+    }
+
+    const onTouchEnd = () => {
+      mouseRef.current = { x: -9999, y: -9999 }
+      if (dragIdx < 0) return
+      const b = buddies[dragIdx]
+      if (dragHistory.length >= 2) {
+        const oldest  = dragHistory[0]
+        const newest  = dragHistory[dragHistory.length - 1]
+        const elapsed = (newest.t - oldest.t) / 1000
+        if (elapsed > 0) {
+          b.vx = Math.max(-700, Math.min(700, (newest.x - oldest.x) / elapsed))
+          b.vy = Math.max(-700, Math.min(700, (newest.y - oldest.y) / elapsed))
+        }
+      }
+      b.state = 'airborne'
+      dragIdx = -1
+      dragHistory.length = 0
+    }
+
     window.addEventListener('resize',     resize,       { passive: true })
     window.addEventListener('mousemove',  onMouseMove,  { passive: true })
     window.addEventListener('mouseleave', onMouseLeave, { passive: true })
     window.addEventListener('mousedown',  onMouseDown)
     window.addEventListener('mouseup',    onMouseUp)
+    window.addEventListener('touchstart', onTouchStart, { passive: false })
+    window.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    window.addEventListener('touchend',   onTouchEnd)
 
     // Pre-allocated buckets for field modes
     const buckets: Array<Array<{ x: number; y: number }>> =
@@ -1356,8 +1465,10 @@ export default function SignalField({ mode, effect }: Props) {
         if (b.x + BW > W) {
           if (portal && b.onGround && portalCooldown[i] <= 0) {
             // Walk into the right-wall portal → fall from sky onto a high platform
-            const highPlats = platforms.filter(p => p.y <= H * 0.50)
-            const tgt = highPlats[Math.floor(Math.random() * highPlats.length)]
+            // On mobile the layout is lower, so use the top half of available platforms
+            const sorted    = [...platforms].sort((a, b) => a.y - b.y)
+            const topHalf   = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2)))
+            const tgt       = topHalf[Math.floor(Math.random() * topHalf.length)]
             b.x        = tgt.x + Math.random() * Math.max(0, tgt.w - BW)
             b.y        = -(BH + CELL_H * 3)
             b.vx       = (Math.random() - 0.5) * 40
@@ -1550,9 +1661,10 @@ export default function SignalField({ mode, effect }: Props) {
         const gY = platforms[0].y
         c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.16)'
         for (const prop of groundProps) {
+          const baseY = prop.platY ?? gY
           for (let li = 0; li < prop.lines.length; li++) {
-            // Last line sits one cell above the ground platform line
-            const py = gY - (prop.lines.length - li) * CELL_H
+            // Last line sits one cell above the platform surface
+            const py = baseY - (prop.lines.length - li) * CELL_H
             c2d.fillText(prop.lines[li], prop.x, py)
           }
         }
@@ -1861,6 +1973,9 @@ export default function SignalField({ mode, effect }: Props) {
       window.removeEventListener('mouseleave', onMouseLeave)
       window.removeEventListener('mousedown',  onMouseDown)
       window.removeEventListener('mouseup',    onMouseUp)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove',  onTouchMove)
+      window.removeEventListener('touchend',   onTouchEnd)
       document.body.style.cursor = ''
     }
   }, [mounted])
