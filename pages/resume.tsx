@@ -111,17 +111,23 @@ const MUSH_FRAMES = [
 ]
 const MUSH_NEUTRAL   = ['            ', ' .-o-OO-o-. ', '(__________)', '   | · ·|   ', '   |____|   ']
 const MUSH_LOOK_LEFT = ['            ', ' .-o-OO-o-. ', '(__________)', '   |· · |   ', '   |____|   ']
+const MUSH_ARM_REACH = ['            ', ' .-o-OO-o-. ', '(__________)', ' o=|· · |   ', '   |____|   ']
+const MUSH_ARM_PULL  = ['            ', ' .-o-OO-o-. ', '(__________)', '  /|· · |   ', '   |____|   ']
+const MUSH_LOOK_UP   = ['    * *     ', ' .-o-OO-o-. ', '(__________)', '   | ^ ^|   ', '   |____|   ']
 const DUST_CHARS = ['·', '.', "'"]
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; ch: string }
 
-function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
+function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivElement>; onComplete: () => void }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const isInView     = useInView(wrapRef, { once: true, amount: 0 })
 
   const xMotion      = useMotionValue(-100)
   const topMotion    = useMotionValue(0)
   const rotateMotion = useMotionValue(0)
+  const leverOpacity = useMotionValue(0)
+  const leverY       = useMotionValue(0)
+  const leverX       = useMotionValue(0)
   const mushX   = useRef(-100)
   const mushTop = useRef(0)
   const particles = useRef<Particle[]>([])
@@ -130,8 +136,9 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
   const rafId     = useRef<number>()
   const lastT     = useRef(0)
 
-  const [display, setDisplay] = useState(MUSH_NEUTRAL)
-  const [done,    setDone]    = useState(false)
+  const [display,       setDisplay]       = useState(MUSH_NEUTRAL)
+  const [done,          setDone]          = useState(false)
+  const [btnPressed,    setBtnPressed]    = useState(false)
 
   useEffect(() => xMotion.on('change',   v => { mushX.current   = v }), [xMotion])
   useEffect(() => topMotion.on('change', v => { mushTop.current = v }), [topMotion])
@@ -245,6 +252,21 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
         })
     }
 
+    const sparkBurst = () => {
+      const sx = mushX.current + 10
+      const sy = mushTop.current + 3 * 13 + 6
+      for (let p = 0; p < 5; p++) {
+        particles.current.push({
+          x: sx + (Math.random() - 0.5) * 20,
+          y: sy + (Math.random() - 0.5) * 12,
+          vx: (Math.random() - 0.5) * 90,
+          vy: -25 - Math.random() * 35,
+          life: 0.7,
+          ch: ['*', '+', '·', '×'][Math.floor(Math.random() * 4)],
+        })
+      }
+    }
+
     async function run() {
       // Let card entrance animations finish before measuring
       await sleep(600)
@@ -255,35 +277,45 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
       const card1   = cards[0] ?? { left: 0,         right: w * 0.47, top: platTop, width: w * 0.47 }
       const card2   = cards[1] ?? { left: w * 0.53,  right: w,        top: platTop, width: w * 0.47 }
 
+      // On mobile the grid is single-column so card2 is stacked below card1
+      const isMobile = cards.length >= 2 && card2.top > card1.top + 20
+
       // Snap to card-border height before appearing
       topMotion.set(platTop - BH - 10)
 
       startWalk()
-      // Walk across card 1
-      await animate(xMotion, card1.right - 32, {
-        duration: (card1.right - 32 + 100) / WALK_SPEED,
-        ease: 'linear',
-      })
-      if (cancelled) return
+      if (isMobile) {
+        // Mobile: walk to 45% of the full-width card, pause, walk off
+        const pauseX = card1.left + card1.width * 0.45
+        await animate(xMotion, pauseX, {
+          duration: (pauseX + 100) / WALK_SPEED,
+          ease: 'linear',
+        })
+      } else {
+        // Desktop: walk to end of card 1, hop gap, walk to 40% of card 2
+        await animate(xMotion, card1.right - 42, {
+          duration: (card1.right - 42 + 100) / WALK_SPEED,
+          ease: 'linear',
+        })
+        if (cancelled) return
 
-      // Hop gap to card 2
-      stopWalk()
-      await Promise.all([
-        animate(xMotion, card2.left - 4, { duration: 0.44, ease: 'linear' }),
-        (async () => {
-          await animate(topMotion, platTop - BH - 36, { duration: 0.18, ease: 'easeOut' })
-          await animate(topMotion, platTop - BH - 10, { duration: 0.18, ease: 'easeIn'  })
-        })(),
-      ])
-      if (cancelled) return
+        stopWalk()
+        await Promise.all([
+          animate(xMotion, card2.left - 4, { duration: 0.52, ease: 'linear' }),
+          (async () => {
+            await animate(topMotion, platTop - BH - 36, { duration: 0.18, ease: 'easeOut' })
+            await animate(topMotion, platTop - BH - 10, { duration: 0.18, ease: 'easeIn'  })
+          })(),
+        ])
+        if (cancelled) return
 
-      startWalk()
-      // Walk to ~40% of card 2, pause to look around
-      const pauseX = card2.left + card2.width * 0.4
-      await animate(xMotion, pauseX, {
-        duration: (pauseX - card2.left) / WALK_SPEED,
-        ease: 'linear',
-      })
+        startWalk()
+        const pauseX = card2.left + card2.width * 0.4
+        await animate(xMotion, pauseX, {
+          duration: (pauseX - card2.left) / WALK_SPEED,
+          ease: 'linear',
+        })
+      }
       if (cancelled) return
 
       stopWalk()
@@ -299,34 +331,54 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
 
       startWalk()
       await animate(xMotion, w + 100, {
-        duration: (w + 100 - pauseX) / WALK_SPEED,
+        duration: (w + 100 - xMotion.get()) / WALK_SPEED,
         ease: 'linear',
       })
       stopWalk()
       if (cancelled) return
 
-      // Peek back from right edge — diagonal tilt, look around, retreat
+      // Peek back from right edge — lean in, pull lever, watch buddies fall, retreat
+      // Show more of the mushroom on narrow mobile screens
+      const peekX = isMobile ? w * 0.72 : w * 0.91
       await sleep(500)
       if (cancelled) return
       setDisplay(MUSH_LOOK_LEFT)
       await Promise.all([
-        animate(xMotion,      w * 0.91, { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }),
-        animate(rotateMotion, -28,      { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }),
+        animate(xMotion,      peekX, { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }),
+        animate(rotateMotion, -28,   { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }),
       ])
       if (cancelled) return
-      await sleep(450)
+
+      // Button appears — mounted just left of where the arm reaches
+      setBtnPressed(false)
+      leverX.set(peekX - 10)
+      leverY.set(mushTop.current + 3 * 13)
+      leverOpacity.set(0)
+      await sleep(200)
       if (cancelled) return
-      setDisplay(MUSH_NEUTRAL)
-      await sleep(300)
+      animate(leverOpacity, 1, { duration: 0.3, ease: 'easeOut' })
+      await sleep(400)
       if (cancelled) return
-      setDisplay(MUSH_LOOK_LEFT)
-      await sleep(750)
-      if (cancelled) return
-      setDisplay(MUSH_NEUTRAL)
-      await sleep(250)
-      if (cancelled) return
-      setDisplay(MUSH_LOOK_LEFT)
+
+      setDisplay(MUSH_ARM_REACH)
       await sleep(500)
+      if (cancelled) return
+
+      // Smash — button squishes flat, sparks fly, buddies drop
+      setDisplay(MUSH_ARM_PULL)
+      setBtnPressed(true)
+      sparkBurst()
+      onComplete()
+      await Promise.all([
+        animate(leverY,       mushTop.current + 3 * 13 + 5, { duration: 0.07, ease: 'easeIn' }),
+        animate(leverOpacity, 0,                             { duration: 0.4,  ease: 'easeOut', delay: 0.2 }),
+      ])
+      if (cancelled) return
+
+      await sleep(150)
+      if (cancelled) return
+      setDisplay(MUSH_LOOK_UP)
+      await sleep(1100)
       if (cancelled) return
       await Promise.all([
         animate(xMotion,      w + 100, { duration: 0.45, ease: 'easeIn' }),
@@ -346,6 +398,28 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }} />
       <motion.div
         style={{
+          x: leverX,
+          y: leverY,
+          opacity: leverOpacity,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 2,
+        }}
+      >
+        <pre style={{
+          fontSize: 10,
+          lineHeight: '13px',
+          fontFamily: 'var(--fonts-mono)',
+          color: 'var(--colors-gray10)',
+          margin: 0,
+          letterSpacing: 0,
+        }}>{btnPressed ? '(-)\n │ ' : '(O)\n │ '}</pre>
+      </motion.div>
+      <motion.div
+        style={{
           x: xMotion,
           y: topMotion,
           rotate: rotateMotion,
@@ -361,7 +435,7 @@ function MushWalker({ wrapRef }: { wrapRef: React.RefObject<HTMLDivElement> }) {
           fontSize: 10,
           lineHeight: '13px',
           fontFamily: 'var(--fonts-mono)',
-          color: 'var(--colors-gray8)',
+          color: 'var(--colors-gray10)',
           margin: 0,
           letterSpacing: 0,
         }}>
@@ -418,7 +492,7 @@ const LB_BODIES: Record<string, string[][]> = {
   chonk:    [['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------´  '],['            ','  /\\    /|  ',' ( ·    · ) ',' (   ..   ) ','  `------´  '],['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------´~ ']],
 }
 
-interface LBPart { x: number; y: number; vx: number; vy: number; life: number; ch: string }
+interface LBPart { x: number; y: number; vx: number; vy: number; life: number; ch: string; noGravity?: boolean }
 interface LBPlat { x: number; y: number; w: number }
 interface LBud {
   species:   string
@@ -429,7 +503,7 @@ interface LBud {
   vy:        number
   facing:    1 | -1
   onGround:  boolean
-  state:     'walk' | 'airborne' | 'pause'
+  state:     'walk' | 'airborne' | 'pause' | 'sleep'
   timer:     number
   jumpCool:  number
   animFrame: number
@@ -437,8 +511,11 @@ interface LBud {
   parts:     LBPart[]
 }
 
-function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivElement> }) {
+function LineBuddies({ containerRef, triggered }: { containerRef: React.RefObject<HTMLDivElement>; triggered: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const spawnRef  = useRef(false)
+
+  useEffect(() => { if (triggered) spawnRef.current = true }, [triggered])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -487,63 +564,7 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
     }
     let plats = getPlats()
 
-    const allSpecies = Object.keys(LB_BODIES)
-    const picked     = [...allSpecies].sort(() => Math.random() - 0.5).slice(0, 2)
-
     let buds: LBud[] = []
-    let initDone  = false
-    let initTimer: ReturnType<typeof setTimeout> | undefined
-
-    const initBuds = () => {
-      if (initDone) return
-
-      // Measure work-entry platforms — they may still be scaleX:0 if called too early
-      const cr       = container.getBoundingClientRect()
-      const measEl   = (el: HTMLElement): LBPlat | null => {
-        const r = el.getBoundingClientRect()
-        if (r.width < 40) return null
-        return { x: r.left - cr.left, y: r.bottom - cr.top, w: r.width }
-      }
-      const workEls   = Array.from(container.querySelectorAll<HTMLElement>('[data-platform="work"]'))
-      const workPlats = workEls.map(measEl).filter((p): p is LBPlat => p !== null)
-
-      if (workPlats.length < 2) {
-        // Animations not done — retry in 200 ms
-        initTimer = setTimeout(initBuds, 200)
-        return
-      }
-      initDone = true
-
-      // Buddy 1: top work-entry line (Databricks)
-      // Buddy 2: second-to-last work-entry line
-      const targets: LBPlat[] = [
-        workPlats[0],
-        workPlats[Math.max(0, workPlats.length - 2)],
-      ]
-
-      buds = picked.map((sp, i) => {
-        const p = targets[i]
-        return {
-          species:   sp,
-          eye:       LB_EYES[Math.floor(Math.random() * LB_EYES.length)],
-          x:         p.x + Math.random() * Math.max(0, p.w - BW),
-          y:         p.y - BH,
-          vx:        WALK_VX * (i % 2 === 0 ? 1 : -1),
-          vy:        0,
-          facing:    (i % 2 === 0 ? 1 : -1) as 1 | -1,
-          onGround:  true,
-          state:     'walk' as const,
-          timer:     0.5 + Math.random() * 2,
-          jumpCool:  1.5 + i * 0.5,
-          animFrame: Math.floor(Math.random() * 3),
-          animTimer: 0.3,
-          parts:     [],
-        }
-      })
-    }
-
-    // Delay until Framer Motion entrance animations complete (~600 ms)
-    initTimer = setTimeout(initBuds, 900)
 
     const landDust = (b: LBud, platY: number) => {
       for (let p = 0; p < 5; p++) {
@@ -613,6 +634,31 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
 
     const tick = (now: number) => {
       rafId = requestAnimationFrame(tick)
+
+      // Spawn two buddies falling from sky when mushroom finishes
+      if (spawnRef.current && buds.length === 0) {
+        spawnRef.current = false
+        plats = getPlats()
+        const allSpecies = Object.keys(LB_BODIES)
+        const picked = [...allSpecies].sort(() => Math.random() - 0.5).slice(0, 2)
+        buds = picked.map((sp, i) => ({
+          species:   sp,
+          eye:       LB_EYES[Math.floor(Math.random() * LB_EYES.length)],
+          x:         BW + Math.random() * Math.max(0, canvas.width - BW * 3),
+          y:         -BH - i * 90,
+          vx:        (Math.random() - 0.5) * 20,
+          vy:        180 + Math.random() * 80,
+          facing:    (Math.random() < 0.5 ? 1 : -1) as 1 | -1,
+          onGround:  false,
+          state:     'airborne' as const,
+          timer:     0,
+          jumpCool:  1,
+          animFrame: 0,
+          animTimer: 0.3,
+          parts:     [],
+        }))
+      }
+
       if (buds.length === 0) return
 
       const dt = Math.min((now - (lastT || now)) / 1000, 0.05)
@@ -679,7 +725,9 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
           b.vx = b.facing * WALK_VX
           if (b.timer <= 0) {
             const roll = Math.random()
-            if (roll < 0.30 && b.jumpCool <= 0 && b.onGround) {
+            if (roll < 0.12 && b.onGround) {
+              b.state = 'sleep'; b.timer = 4 + Math.random() * 6
+            } else if (roll < 0.35 && b.jumpCool <= 0 && b.onGround) {
               const feetY = b.y + BH
               const above = plats
                 .filter(p => p.y < feetY - 20 && b.x + BW / 2 > p.x && b.x + BW / 2 < p.x + p.w)
@@ -687,7 +735,7 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
               b.vy       = above ? -Math.sqrt(2 * GRAVITY * (feetY - above.y + 40)) : JUMP_VY
               b.vx       = b.facing * WALK_VX * 1.6
               b.state    = 'airborne'; b.jumpCool = 2.5
-            } else if (roll < 0.55) {
+            } else if (roll < 0.60) {
               b.facing = b.facing === 1 ? -1 : 1; b.timer = 1.5 + Math.random() * 2.5
             } else {
               b.timer = 1 + Math.random() * 2
@@ -695,6 +743,20 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
           }
         } else if (b.state === 'pause') {
           b.vx = 0; if (b.timer <= 0) b.state = 'walk'
+        } else if (b.state === 'sleep') {
+          b.vx = 0
+          if (Math.random() < dt * 1.2) {
+            b.parts.push({
+              x: b.x + BW * 0.62 + Math.random() * 8,
+              y: b.y + BH * 0.15,
+              vx: 8 + Math.random() * 10,
+              vy: -(14 + Math.random() * 12),
+              life: 1.8,
+              ch: Math.random() < 0.5 ? 'z' : 'Z',
+              noGravity: true,
+            })
+          }
+          if (b.timer <= 0) { b.state = 'walk'; b.timer = 1 + Math.random() * 2 }
         }
 
         if (!b.onGround) b.vy = Math.min(b.vy + GRAVITY * dt, MAX_FALL)
@@ -735,7 +797,9 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
         ctx.font = '9px Menlo, "Courier New", monospace'
         for (let i = b.parts.length - 1; i >= 0; i--) {
           const p = b.parts[i]
-          p.x += p.vx * dt; p.y += p.vy * dt; p.vy += GRAVITY * dt; p.life -= dt * 2.8
+          p.x += p.vx * dt; p.y += p.vy * dt
+          if (!p.noGravity) p.vy += GRAVITY * dt
+          p.life -= dt * (p.noGravity ? 1.0 : 2.8)
           if (p.life <= 0) { b.parts.splice(i, 1); continue }
           const pa = (dark ? 0.55 : 0.45) * p.life
           ctx.fillStyle = dark ? `rgba(255,255,255,${pa})` : `rgba(30,30,30,${pa})`
@@ -749,7 +813,6 @@ function LineBuddies({ containerRef }: { containerRef: React.RefObject<HTMLDivEl
     rafId = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(rafId)
-      if (initTimer) clearTimeout(initTimer)
       container.removeEventListener('mousemove', onMove)
       container.removeEventListener('mousedown', onDown)
       window.removeEventListener('mouseup', onUp)
@@ -899,6 +962,7 @@ interface Props {
 export default function Resume({ ogImages = {} }: Props) {
   const contentRef  = useRef<HTMLDivElement>(null)
   const mushWrapRef = useRef<HTMLDivElement>(null)
+  const [mushDone, setMushDone] = useState(false)
 
   return (
     <>
@@ -979,7 +1043,7 @@ export default function Resume({ ogImages = {} }: Props) {
 
       {/* Mushroom + Projects — mushroom walks on the card top-border lines */}
       <div ref={mushWrapRef} style={{ position: 'relative', marginTop: 24, paddingTop: 72, overflow: 'hidden' }}>
-        <MushWalker wrapRef={mushWrapRef} />
+        <MushWalker wrapRef={mushWrapRef} onComplete={() => setMushDone(true)} />
 
         <SectionLabel data-platform="projects" css={{ mt: '$2' }}>Projects</SectionLabel>
         <Box css={{
@@ -1024,7 +1088,7 @@ export default function Resume({ ogImages = {} }: Props) {
       ))}
 
       <Box css={{ height: '$4' }} />
-      <LineBuddies containerRef={contentRef} />
+      <LineBuddies containerRef={contentRef} triggered={mushDone} />
       </div>
     </>
   )
