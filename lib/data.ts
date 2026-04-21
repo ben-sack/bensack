@@ -39,7 +39,7 @@ export const resume = {
     },
     {
       company: 'Progressive Insurance',
-      title: 'Data Engineer → Senior Data Engineer',
+      title: 'Senior Data Engineer',
       start: '2020',
       end: '2022',
       description:
@@ -47,7 +47,7 @@ export const resume = {
     },
     {
       company: 'Progressive Insurance',
-      title: 'Associate → Systems Engineer',
+      title: 'Systems Engineer',
       start: '2018',
       end: '2020',
       description:
@@ -67,6 +67,17 @@ export const resume = {
     'Python', 'SQL', 'Spark', 'Structured Streaming', 'Snowflake',
     'AWS', 'Databricks', 'Airflow', 'MLflow', 'Feature Stores',
     'Kafka', 'Docker', 'Terraform', 'CI/CD', 'JavaScript', 'Go',
+  ],
+  currently: [
+    { label: 'Specialist Solutions Architect at Databricks', href: 'https://databricks.com' },
+    { label: 'bensack.io — this site' },
+  ],
+  previously: [
+    { label: 'Fig — config-driven ETL framework, Disney Streaming' },
+    { label: 'ML feature store for Hulu on Disney+ integration' },
+    { label: 'Cloud data platform migration at Progressive Insurance' },
+    { label: 'Bristol Studios — e-commerce consulting', href: 'https://bristol-studios.com' },
+    { label: 'Streets Ahead — Shopify build', href: 'https://streetsaheadinc.com' },
   ],
   projects: [
     {

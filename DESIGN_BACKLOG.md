@@ -34,3 +34,36 @@ Ideas captured from design brainstorm sessions. Roughly prioritized.
 
 - **Favicon animation** — cycle the favicon between a few ASCII frames (subtle; only when tab is visible)
 - **Reduced-motion fallback** — when `prefers-reduced-motion` is set, replace all canvas animations with a single static art scene rendered once
+
+---
+
+## Performance
+
+- **Dynamically import `SignalField`** — 2,007-line ASCII engine loads synchronously on the home page; use `next/dynamic` with `ssr: false` to defer it
+- **Pause rAF loop on hidden tab** — add `visibilitychange` listener to SignalField to pause/resume the animation loop; currently burns CPU when user switches tabs
+- **ipinfo.io token** — empty token in `index.tsx` will fail silently after free-tier rate limit; move to `NEXT_PUBLIC_IPINFO_TOKEN` env var
+
+---
+
+## Code Structure
+
+- **Extract `shuffleLetters`** — duplicated verbatim in `index.tsx:11–34` and `resume.tsx:10–33`; move to `lib/utils.ts`
+- **Extract link hover CSS** — `resume.tsx` repeats `onMouseEnter/onMouseLeave` color swap 8+ times; replace with a Stitches class `'&:hover': { color: '$gray12' }`
+- **Resolve `PerspectiveGrid.tsx`** — exists as a large, complex component but is wired to no page on the current branch; wire it up or move to a feature branch
+
+---
+
+## Content
+
+- **Resume: render skills, education, and job descriptions** — `data.ts` has `education`, `skills`, `projects`, and per-job `description` fields; none currently render on `/resume`
+- **Rewrite home bio** — "engineer focused on building reliable systems..." doesn't match the creative energy of the site; write copy that sounds like someone who built ASCII buddy creatures
+- **Connect real craft video assets** — 26 items in `data.ts` all point to `assetUrl('peach.mp4')`; connect real recordings or pull craft from primary nav until they exist
+- **Photos page** — linked from dock with equal weight as Resume/Craft but renders "coming soon"; deprioritize visually in dock or fill with real content
+
+---
+
+## Design
+
+- **Add a single accent color** — pure grayscale palette is clean but lacks a visual anchor; one warm accent used on the name, active dock dot, or hover states would make the site more memorable without breaking minimalism
+- **Make scene controls discoverable** — "rain" and "stars" buttons at `11px` / `color: gray8` control the most delightful part of the experience; increase contrast or add a visual hint on arrival
+- **Ground text overlay to ASCII field** — home page bio floats at `top: 9vh` with no visual relationship to the background; a subtle frosted-glass backdrop or spatial anchoring would unify them
