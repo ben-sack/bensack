@@ -3,9 +3,12 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { ThemeProvider } from 'next-themes'
 import { CSS } from '@stitches/react'
+import dynamic from 'next/dynamic'
 import { globalStyles, darkTheme, config } from '../stitches.config'
 import Box from '../components/Box'
 import Dock from '../components/Dock'
+
+const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
 
 globalStyles()
 
@@ -23,7 +26,7 @@ export default function App({ Component, pageProps }: AppProps) {
     margin: '0 auto',
     '@mobile': { pt: '40px' },
     ...(route === '/' ? { padding: 0, maxWidth: 'none', minHeight: '100dvh', overflow: 'hidden' } : {}),
-    ...(route === '/resume' ? { maxWidth: 720 } : {}),
+    ...(route === '/work' ? { maxWidth: 720 } : {}),
     ...(route.startsWith('/craft') ? { maxWidth: 720, ...(route === '/craft' ? { padding: '8px 0px 4px 4px' } : {}) } : {}),
     ...(route === '/photos' ? { padding: 8, maxWidth: 'none' } : {}),
   }
@@ -43,6 +46,11 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
 
       <ThemeProvider disableTransitionOnChange attribute="class" value={{ dark: darkTheme.className }}>
+        {route !== '/' && (
+          <div style={{ opacity: 0.13, pointerEvents: 'none' }}>
+            <SignalField mode="density" />
+          </div>
+        )}
         <Dock />
         <Box as="main" css={mainCss}>
           <Component {...pageProps} key={router.route} />

@@ -465,7 +465,7 @@ export default function Dock() {
             <HomeIcon />
           </DockItem>
 
-          <DockItem href="/resume" label="Resume">
+          <DockItem href="/work" label="Work">
             <ResumeIcon />
           </DockItem>
 

@@ -1,37 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import SEO from '../components/SEO'
-import SignalField, { type BotEffect } from '../components/SignalField'
+import type { BotEffect } from '../components/SignalField'
+import { shuffleLetters } from '../lib/utils'
+
+const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
 
 const EFFECTS: { id: BotEffect; label: string }[] = [
   { id: 'rain',  label: 'rain'  },
   { id: 'stars', label: 'stars' },
 ]
 
-// ─── Letter shuffle ────────────────────────────────────────────────────────
-function shuffleLetters(el: HTMLElement, options: { iterations?: number } = {}) {
-  const { iterations = 8 } = options
-  const chars = 'abcdefghijklmnopqrstuvwxyz·—∙'
-  const original = el.textContent ?? ''
-  const letters = original.split('')
-  const nonSpace = letters.reduce<number[]>((acc, c, i) => {
-    if (!/\s/.test(c)) acc.push(i)
-    return acc
-  }, [])
-  let timer: ReturnType<typeof setTimeout>
-  function step(round: number) {
-    if (round > nonSpace.length) { el.textContent = original; return }
-    const cur = [...letters]
-    for (let i = Math.max(round, 0); i < nonSpace.length; i++) {
-      cur[nonSpace[i]] = i < round + iterations
-        ? chars[Math.floor(Math.random() * chars.length)]
-        : ''
-    }
-    el.textContent = cur.join('')
-    timer = setTimeout(() => step(round + 1), 1000 / 30)
-  }
-  step(-iterations)
-  return () => clearTimeout(timer)
-}
 
 // ─── Dot ──────────────────────────────────────────────────────────────────────
 function Dot() {
@@ -187,12 +166,11 @@ export default function Home() {
             }}
           >
             <span style={{ color: 'var(--colors-gray11)' }}>ben sack.</span>{' '}
-            engineer focused on building reliable systems and making complex things easier to run.
-            currently at{' '}
+            data engineer at{' '}
             <a href="https://databricks.com" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>
               databricks
             </a>
-            . previously at disney.
+            . also responsible for whatever this is.
           </p>
           <h1 className="vh">Ben Sack — Engineer building reliable systems. Currently at Databricks.</h1>
 

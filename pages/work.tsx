@@ -6,32 +6,7 @@ import Box from '../components/Box'
 import Text from '../components/Text'
 import { styled } from '../stitches.config'
 import { resume } from '../lib/data'
-
-// ─── Letter shuffle ────────────────────────────────────────────────────────
-function shuffleLetters(el: HTMLElement, options: { iterations?: number } = {}) {
-  const { iterations = 8 } = options
-  const chars = 'abcdefghijklmnopqrstuvwxyz·—'
-  const original = el.textContent ?? ''
-  const letters = original.split('')
-  const nonSpace = letters.reduce<number[]>((acc, c, i) => {
-    if (!/\s/.test(c)) acc.push(i)
-    return acc
-  }, [])
-  let timer: ReturnType<typeof setTimeout>
-  function step(round: number) {
-    if (round > nonSpace.length) { el.textContent = original; return }
-    const cur = [...letters]
-    for (let i = Math.max(round, 0); i < nonSpace.length; i++) {
-      cur[nonSpace[i]] = i < round + iterations
-        ? chars[Math.floor(Math.random() * chars.length)]
-        : ''
-    }
-    el.textContent = cur.join('')
-    timer = setTimeout(() => step(round + 1), 1000 / 30)
-  }
-  step(-iterations)
-  return () => clearTimeout(timer)
-}
+import { shuffleLetters } from '../lib/utils'
 
 // ─── Styles ────────────────────────────────────────────────────────────────
 const SectionLabel = styled('p', {
@@ -268,8 +243,8 @@ function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivE
     }
 
     async function run() {
-      // Let card entrance animations finish before measuring
-      await sleep(600)
+      // Let card entrance animations finish, then an extra pause before walking in
+      await sleep(1600)
       if (cancelled) return
 
       const cards  = measureCards()
@@ -955,6 +930,9 @@ function SkillGroup({ label, skills, index = 0 }: { label: string; skills: strin
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
+// Persists across client-side navigations, resets on full page reload
+let sessionAnimPlayed = false
+
 interface Props {
   ogImages: Record<string, string | null>
 }
@@ -962,12 +940,12 @@ interface Props {
 export default function Resume({ ogImages = {} }: Props) {
   const contentRef  = useRef<HTMLDivElement>(null)
   const mushWrapRef = useRef<HTMLDivElement>(null)
-  const [mushDone, setMushDone] = useState(false)
+  const [mushDone, setMushDone] = useState(sessionAnimPlayed)
 
   return (
     <>
-      <SEO title="Resume" description="Ben Sack — Engineer at Databricks. Building reliable systems and making complex things easier to run." />
-      <div ref={contentRef} style={{ position: 'relative' }}>
+      <SEO title="Work" description="Ben Sack — Engineer at Databricks. Building reliable systems and making complex things easier to run." />
+      <div ref={contentRef} style={{ position: 'relative', zIndex: 2 }}>
 
       {/* Links */}
       <Box css={{ mb: '$3', display: 'flex', gap: '$2', flexWrap: 'wrap', ai: 'center' }}>
@@ -1043,7 +1021,9 @@ export default function Resume({ ogImages = {} }: Props) {
 
       {/* Mushroom + Projects — mushroom walks on the card top-border lines */}
       <div ref={mushWrapRef} style={{ position: 'relative', marginTop: 24, paddingTop: 72, overflow: 'hidden' }}>
-        <MushWalker wrapRef={mushWrapRef} onComplete={() => setMushDone(true)} />
+        {!sessionAnimPlayed && (
+          <MushWalker wrapRef={mushWrapRef} onComplete={() => { sessionAnimPlayed = true; setMushDone(true) }} />
+        )}
 
         <SectionLabel data-platform="projects" css={{ mt: '$2' }}>Projects</SectionLabel>
         <Box css={{

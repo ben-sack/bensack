@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 
 // ─── Modes ─────────────────────────────────────────────────────────────────────
-export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'surf' | 'bots'
+export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'bots'
 export type BotEffect  = 'none' | 'rain' | 'stars'
 
 // ─── Character ramps ───────────────────────────────────────────────────────────
@@ -67,21 +67,21 @@ const BUDDY_BODIES: Record<string, string[][]> = {
     ['            ','    (·>     ','     ||     ','   _(__)_   ','    ^^^^    '],
     ['            ','     (·>>   ','     ||     ','   _(__)_   ','    ^^^^    '],
   ],
-  blob: [
-    ['            ','   .----.   ','  ( ·  · )  ','  (      )  ','   `----\u00b4   '],
-    ['            ','  .------.  ',' (  ·  ·  ) ',' (        ) ','  `------\u00b4  '],
-    ['            ','    .--.    ','   (·  ·)   ','   (    )   ','    `--\u00b4    '],
-  ],
+  // blob: [
+  // ['            ','   .----.   ','  ( ·  · )  ','  (      )  ','   `----\u00b4   '],
+  // ['            ','  .------.  ',' (  ·  ·  ) ',' (        ) ','  `------\u00b4  '],
+  // ['            ','    .--.    ','   (·  ·)   ','   (    )   ','    `--\u00b4    '],
+  // ],
   cat: [
     ['            ','   /\\_/\\    ','  ( ·   ·)  ','  (  \u03c9  )   ','  (")_(")   '],
     ['            ','   /\\_/\\    ','  ( ·   ·)  ','  (  \u03c9  )   ','  (")_(")~  '],
     ['            ','   /\\-/\\    ','  ( ·   ·)  ','  (  \u03c9  )   ','  (")_(")   '],
   ],
-  dragon: [
-    ['            ','  /^\\  /^\\  ',' <  ·  ·  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
-    ['            ','  /^\\  /^\\  ',' <  ·  ·  > ',' (        ) ','  `-vvvv-\u00b4  '],
-    ['   ~    ~   ','  /^\\  /^\\  ',' <  ·  ·  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
-  ],
+  // dragon: [
+  // ['            ','  /^\\  /^\\  ',' <  ·  ·  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
+  // ['            ','  /^\\  /^\\  ',' <  ·  ·  > ',' (        ) ','  `-vvvv-\u00b4  '],
+  // ['   ~    ~   ','  /^\\  /^\\  ',' <  ·  ·  > ',' (   ~~   ) ','  `-vvvv-\u00b4  '],
+  // ],
   octopus: [
     ['            ','   .----.   ','  ( ·  · )  ','  (______)  ','  /\\/\\/\\/\\  '],
     ['            ','   .----.   ','  ( ·  · )  ','  (______)  ','  \\/\\/\\/\\/  '],
@@ -142,11 +142,11 @@ const BUDDY_BODIES: Record<string, string[][]> = {
     ['            ',' .-O-oo-O-. ','(__________)','   |·  ·|   ','   |____|   '],
     ['   . o  .   ',' .-o-OO-o-. ','(__________)','   |·  ·|   ','   |____|   '],
   ],
-  chonk: [
-    ['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4  '],
-    ['            ','  /\\    /|  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4  '],
-    ['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4~ '],
-  ],
+  // chonk: [
+  // ['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4  '],
+  // ['            ','  /\\    /|  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4  '],
+  // ['            ','  /\\    /\\  ',' ( ·    · ) ',' (   ..   ) ','  `------\u00b4~ '],
+  // ],
 }
 
 // ─── Speech phrases ────────────────────────────────────────────────────────────
@@ -154,9 +154,9 @@ const BUDDY_BODIES: Record<string, string[][]> = {
 const BUDDY_PHRASES: Record<string, string[]> = {
   duck:     ['quack!', 'QUACK',  'quack?', '...'],
   goose:    ['HONK!!', 'HONK',   'honk~',  'honk?'],
-  blob:     ['bloop~', 'glorp',  '...',    'bloop?'],
+  // blob:     ['bloop~', 'glorp',  '...',    'bloop?'],
   cat:      ['meow',   'mrrrow', 'purr~',  '...'],
-  dragon:   ['RAWR!',  'grrr',   '...',    'rawr?'],
+  // dragon:   ['RAWR!',  'grrr',   '...',    'rawr?'],
   octopus:  ['splsh!', 'ink!',   'hi!',    '...'],
   owl:      ['hoo?',   'HOO!',   'hmm',    '...'],
   penguin:  ['brrr!',  'waddle', 'brr?',   '...'],
@@ -169,7 +169,7 @@ const BUDDY_PHRASES: Record<string, string[]> = {
   robot:    ['beep',   'boop!',  '01010',  'ERR?'],
   rabbit:   ['*hop*',  'hi!',    'boing',  '...'],
   mushroom: ['spore!', '...',    'grow~',  'hi!'],
-  chonk:    ['*nap*',  'chonk',  'nom',    '...'],
+  // chonk:    ['*nap*',  'chonk',  'nom',    '...'],
 }
 const GREET_PHRASES = ['hi!', 'hello!', 'hey!', 'yo!', 'sup?', 'hiya!', ':)']
 const BUBBLE_LIFE   = 3.0   // seconds a speech bubble stays visible
@@ -436,121 +436,6 @@ function generateCity(cols: number, rows: number): ArtCell[] {
   return cells
 }
 
-function generateBeach(cols: number, rows: number): ArtCell[] {
-  // ── The Great Wave — Hokusai style, with stickman surfer ─────────────────────
-  //
-  // Canvas mask: fades in rows*0.10→0.28, opaque 0.28→0.72, fades out 0.72→0.92
-  //
-  // Wave is a contained shape in the LEFT-CENTER of the canvas:
-  //   crest at rows*0.36 (well inside visible zone)
-  //   base  at rows*0.66 (still visible)
-  //   width: cols*0.02 → cols*0.60 (left 60%)
-  // Fuji sits upper-right, visible in clear sky.
-
-  const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(' '))
-  function set(r: number, c: number, ch: string) {
-    if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = ch
-  }
-  function setIfEmpty(r: number, c: number, ch: string) {
-    if (r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] === ' ') grid[r][c] = ch
-  }
-
-  // ── Wave dimensions (simplified for layout iteration) ─────────────────────────
-  // Visible mask band: rows*0.28–0.72. Wave sits squarely inside it.
-  const peakR  = Math.floor(rows * 0.37)   // top of crest
-  const baseR  = Math.floor(rows * 0.63)   // bottom of wave
-  const waveH  = Math.max(1, baseR - peakR)
-
-  const leftC  = Math.floor(cols * 0.06)   // left tip
-  const crestR = Math.floor(cols * 0.46)   // right extent of crest
-  const footR  = Math.floor(cols * 0.54)   // right foot at base
-  // Alias for Fuji section below
-  const waveBaseR = baseR
-
-  // Left wall: steep quadratic
-  function edgeL(r: number): number {
-    if (r <= peakR) return leftC
-    if (r >= baseR) return 0
-    const t = (baseR - r) / waveH
-    return Math.round(leftC * t * t)
-  }
-
-  // Right slope: linear widening
-  function edgeR(r: number): number {
-    if (r <= peakR) return crestR
-    if (r >= baseR) return footR
-    const t = (r - peakR) / waveH
-    return Math.round(crestR + (footR - crestR) * t)
-  }
-
-  // Hollow curl in the top-left (for the future surfer)
-  const hollowBot = peakR + Math.floor(waveH * 0.45)
-  function isHollow(r: number, c: number): boolean {
-    if (r <= peakR || r > hollowBot) return false
-    const t      = (r - peakR) / Math.max(1, hollowBot - peakR)
-    const hRight = Math.floor(crestR * 0.52 - t * crestR * 0.12)
-    return c > leftC + 1 && c < hRight
-  }
-
-  // ── Wave body ─────────────────────────────────────────────────────────────────
-  for (let r = peakR; r <= baseR; r++) {
-    const l = edgeL(r), ri = edgeR(r)
-    for (let c = l; c <= ri; c++) {
-      if (isHollow(r, c)) continue
-      const margin = Math.min(c - l, ri - c)
-      set(r, c, margin <= 1 ? '#' : margin <= 4 ? 'W' : '~')
-    }
-  }
-
-  // ── Crest foam line ───────────────────────────────────────────────────────────
-  for (let c = leftC; c <= crestR; c++) {
-    setIfEmpty(peakR, c, c % 4 === 0 ? '^' : '~')
-  }
-
-  // ── 3 foam claw tips above the crest ─────────────────────────────────────────
-  const span = crestR - leftC
-  for (let i = 0; i < 3; i++) {
-    const bc = leftC + Math.floor(span * (0.18 + i * 0.32))
-    for (let j = 0; j < 3; j++) {
-      const r = peakR - 1 - j
-      setIfEmpty(r, bc + Math.min(j, 1),     '~')
-      setIfEmpty(r, bc + Math.min(j, 1) + 1, j === 0 ? '^' : '`')
-    }
-  }
-
-  // ── Mount Fuji (upper right) ──────────────────────────────────────────────────
-  const fujiPeakR = Math.floor(rows * 0.14)
-  const fujiPeakC = Math.floor(cols * 0.80)
-  const fujiBaseR = Math.floor(rows * 0.40)
-  const fujiHW    = Math.floor((fujiBaseR - fujiPeakR) * 0.78)
-  const fujiSnowR = fujiPeakR + Math.floor((fujiBaseR - fujiPeakR) * 0.28)
-  for (let r = fujiPeakR; r <= fujiBaseR; r++) {
-    const t  = (r - fujiPeakR) / (fujiBaseR - fujiPeakR)
-    const hw = Math.floor(fujiHW * t)
-    for (let c = fujiPeakC - hw; c <= fujiPeakC + hw; c++) {
-      if (c === fujiPeakC - hw)       setIfEmpty(r, c, '\\')
-      else if (c === fujiPeakC + hw)  setIfEmpty(r, c, '/')
-      else if (r <= fujiSnowR)        setIfEmpty(r, c, '*')
-      else                            setIfEmpty(r, c, '.')
-    }
-  }
-
-  // ── Foreground sea (below wave base) ──────────────────────────────────────────
-  for (let r = waveBaseR + 1; r < rows - 1; r++) {
-    for (let c = 0; c < cols; c++) {
-      const v = (Math.sin(c * 0.5 + r * 1.1) + Math.cos(c * 0.3 + r * 0.7 + 1.3)) / 2
-      if (v > 0.50)      setIfEmpty(r, c, '~')
-      else if (v > 0.20) setIfEmpty(r, c, '-')
-    }
-  }
-  for (let c = 0; c < cols; c++) set(rows - 1, c, '~')
-
-  const cells: ArtCell[] = []
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++)
-      if (grid[r][c] !== ' ') cells.push({ col: c, row: r, ch: grid[r][c] })
-  return cells
-}
 
 // ─── Stateful mode types ────────────────────────────────────────────────────────
 interface RainCol {
@@ -651,11 +536,9 @@ export default function SignalField({ mode, effect }: Props) {
 
     // Scene cache – invalidated on resize
     let cachedCity:  ArtCell[] | null = null
-    let cachedBeach: ArtCell[] | null = null
 
     function invalidateSceneCache() {
       cachedCity  = null
-      cachedBeach = null
     }
 
     // ── Init functions ──────────────────────────────────────────────────────────
@@ -727,11 +610,19 @@ export default function SignalField({ mode, effect }: Props) {
           platY: p.y,
         }))
       } else {
-        const positions = [0.06, 0.17, 0.30, 0.47, 0.63, 0.77, 0.91]
+        // Four props in two loose pairs, flanking the center
+        const positions = [
+          0.08 + (Math.random() - 0.5) * 0.06,
+          0.18 + (Math.random() - 0.5) * 0.06,
+          0.74 + (Math.random() - 0.5) * 0.06,
+          0.86 + (Math.random() - 0.5) * 0.06,
+        ]
+        const shuffledTemplates = [...PROP_TEMPLATES].sort(() => Math.random() - 0.5)
         groundProps = positions.map((frac, i) => ({
           x:     Math.floor(W * frac),
-          lines: PROP_TEMPLATES[i % PROP_TEMPLATES.length],
+          lines: shuffledTemplates[i % shuffledTemplates.length],
         }))
+
       }
     }
 
@@ -751,7 +642,7 @@ export default function SignalField({ mode, effect }: Props) {
       initSky()
       particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
-      const COUNT    = Math.min(W < 640 ? 2 : 12, SPECIES.length)
+      const COUNT    = Math.min(W < 640 ? 2 : 6, SPECIES.length)
       const shuffled = [...SPECIES].sort(() => Math.random() - 0.5)
       // Prefer elevated platforms for spawn; fall back to ground if none exist (mobile)
       const spawnPlats = platforms.length > 1 ? platforms.slice(1) : platforms
@@ -936,7 +827,6 @@ export default function SignalField({ mode, effect }: Props) {
       const m   = modeRef.current
       if (m === 'rain') initRain()
       if (m === 'city') initCity(now)
-      if (m === 'surf') { invalidateSceneCache() }
       if (m === 'bots') {
         initBots()
         if (effectRef.current === 'stars') initStars()
@@ -1301,20 +1191,6 @@ export default function SignalField({ mode, effect }: Props) {
       }
     }
 
-    // ── Draw: surf ───────────────────────────────────────────────────────────────
-    // Static wave scene drawn directly — no spring physics.
-    function drawSurf() {
-      const dark = isDarkRef.current
-      if (!cachedBeach) cachedBeach = generateBeach(cols, rows)
-      c2d.clearRect(0, 0, W, H)
-      c2d.font = FONT
-      c2d.textBaseline = 'top'
-      c2d.fillStyle = dark ? 'rgba(255,255,255,0.48)' : 'rgba(30,30,30,0.40)'
-      for (const { col, row, ch } of cachedBeach) {
-        c2d.fillText(ch, col * CELL_W, row * CELL_H)
-      }
-    }
-
     // ── Draw: bots ─────────────────────────────────────────────────────────────
     // Full platformer physics: gravity, walking, jumping, platform collision.
     function drawBots(dt: number, now: number) {
@@ -1566,6 +1442,21 @@ export default function SignalField({ mode, effect }: Props) {
       c2d.font = FONT
       c2d.textBaseline = 'top'
 
+      // ── Background texture — faint drifting density field ──────────────────
+      {
+        const bgT   = now / 1000 * 0.15
+        const alpha = dark ? 0.038 : 0.030
+        c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const v = densityField(col / cols, row / rows, bgT)
+            if (v > 0.28) {
+              c2d.fillText(v > 0.65 ? ':' : v > 0.46 ? '·' : '.', col * CELL_W, row * CELL_H)
+            }
+          }
+        }
+      }
+
       // ── Sky background ─────────────────────────────────────────────────────
       if (dark) {
         c2d.fillStyle = 'rgba(255,255,255,0.08)'
@@ -1648,11 +1539,23 @@ export default function SignalField({ mode, effect }: Props) {
       // Draw platforms — individual fillText calls so CELL_W grid spacing is
       // honoured; a single long string would render at natural font advance width
       // (~7 px) not the 11 px cell, causing the floor to appear short.
-      c2d.fillStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(30,30,30,0.13)'
       for (const plat of platforms) {
-        const charCount = Math.max(1, Math.floor(plat.w / CELL_W))
+        const isGround   = plat === platforms[0]
+        const charCount  = Math.max(1, Math.floor(plat.w / CELL_W))
+        // Surface — slightly brighter for elevated platforms
+        c2d.fillStyle = dark
+          ? `rgba(255,255,255,${isGround ? 0.13 : 0.20})`
+          : `rgba(30,30,30,${isGround ? 0.10 : 0.17})`
         for (let j = 0; j < charCount; j++) {
-          c2d.fillText('_', plat.x + j * CELL_W, plat.y)
+          c2d.fillText('─', plat.x + j * CELL_W, plat.y)
+        }
+        // Support pillars hanging below elevated platforms
+        if (!isGround && charCount > 2) {
+          c2d.fillStyle = dark ? 'rgba(255,255,255,0.10)' : 'rgba(30,30,30,0.08)'
+          for (let d = 1; d <= 3; d++) {
+            c2d.fillText('|', plat.x,                           plat.y + d * CELL_H)
+            c2d.fillText('|', plat.x + (charCount - 1) * CELL_W, plat.y + d * CELL_H)
+          }
         }
       }
 
@@ -1939,7 +1842,6 @@ export default function SignalField({ mode, effect }: Props) {
         prevMode = m
         if (m === 'rain') initRain()
         if (m === 'city') initCity(now)
-        if (m === 'surf') { invalidateSceneCache() }
         if (m === 'bots') initBots()
       }
 
@@ -1958,7 +1860,6 @@ export default function SignalField({ mode, effect }: Props) {
       if      (m === 'density' || m === 'waves') drawField(t)
       else if (m === 'rain')                      drawRain(dt)
       else if (m === 'city')                      drawCity(now, dt)
-      else if (m === 'surf')                      drawSurf()
       else if (m === 'bots')                      drawBots(dt, now)
 
       animId = requestAnimationFrame(draw)
