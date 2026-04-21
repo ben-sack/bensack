@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, animate, useMotionValue, useInView } from 'framer-motion'
+import { motion, animate, useMotionValue, useInView, AnimatePresence } from 'framer-motion'
 import type { GetStaticProps } from 'next'
 import SEO from '../components/SEO'
 import Box from '../components/Box'
@@ -26,34 +26,113 @@ const Divider = styled('hr', {
   my: '$2',
 })
 
+// ─── Reveal line ───────────────────────────────────────────────────────────
+// Single-line text that fades + slides in and scrambles into place.
+// For linked items shuffleLetters targets the <a> directly so the DOM node
+// is never flattened (applying it to a parent with child elements destroys them).
+function RevealLine({ label, href, delay = 0 }: { label: string; href?: string; delay?: number }) {
+  const ref    = useRef<HTMLElement>(null)
+  const isInView = useInView(ref as React.RefObject<HTMLElement>, { once: true })
+  const fired  = useRef(false)
+
+  useEffect(() => {
+    if (!isInView || fired.current) return
+    fired.current = true
+    const t = setTimeout(() => {
+      if (ref.current) shuffleLetters(ref.current, { iterations: 5 })
+    }, delay * 1000 + 40)
+    return () => clearTimeout(t)
+  }, [isInView, delay])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.2, delay, ease: 'easeOut' }}
+    >
+      <Text size="13" color="gray11" css={{ lineHeight: '20px' }}>
+        {href ? (
+          <a
+            ref={ref as React.Ref<HTMLAnchorElement>}
+            href={href} target="_blank" rel="noopener noreferrer"
+            style={{ color: 'inherit', transition: 'color 150ms ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '')}
+          >{label}</a>
+        ) : (
+          <span ref={ref as React.Ref<HTMLSpanElement>}>{label}</span>
+        )}
+      </Text>
+    </motion.div>
+  )
+}
+
+// ─── Animated section label ────────────────────────────────────────────────
+// Shuffles text into place when it enters the viewport.
+function AnimatedLabel({ children, delay = 0, 'data-platform': dataPlatform }: {
+  children: React.ReactNode
+  delay?: number
+  'data-platform'?: string
+}) {
+  const ref      = useRef<HTMLParagraphElement>(null)
+  const isInView = useInView(ref, { once: true })
+  const fired    = useRef(false)
+
+  useEffect(() => {
+    if (!isInView || fired.current) return
+    fired.current = true
+    const t = setTimeout(() => {
+      if (ref.current) shuffleLetters(ref.current, { iterations: 10 })
+    }, delay * 1000)
+    return () => clearTimeout(t)
+  }, [isInView, delay])
+
+  return (
+    <motion.div
+      data-platform={dataPlatform}
+      initial={{ opacity: 0 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.15, delay }}
+    >
+      <SectionLabel ref={ref as React.Ref<HTMLParagraphElement>}>{children}</SectionLabel>
+    </motion.div>
+  )
+}
+
 // ─── Work entry ────────────────────────────────────────────────────────────
 interface WorkEntryProps {
   company: string
   title: string
   start: string
   end: string
+  delay?: number
 }
 
-function WorkEntry({ company, title, start, end }: WorkEntryProps) {
+function WorkEntry({ company, title, start, end, delay = 0 }: WorkEntryProps) {
   const companyRef = useRef<HTMLSpanElement>(null)
   const titleRef   = useRef<HTMLSpanElement>(null)
   const dateRef    = useRef<HTMLSpanElement>(null)
 
+  // Fire shuffle timed with the staggered reveal so text scrambles as it appears
   useEffect(() => {
     const opts = { iterations: 6 }
-    if (companyRef.current) shuffleLetters(companyRef.current, opts)
-    if (titleRef.current)   shuffleLetters(titleRef.current,   opts)
-    const t = setTimeout(() => {
+    const t1 = setTimeout(() => {
+      if (companyRef.current) shuffleLetters(companyRef.current, opts)
+      if (titleRef.current)   shuffleLetters(titleRef.current,   opts)
+    }, delay * 1000 + 40)
+    const t2 = setTimeout(() => {
       if (dateRef.current) shuffleLetters(dateRef.current, opts)
-    }, 500)
-    return () => clearTimeout(t)
-  }, [])
+    }, delay * 1000 + 500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [delay])
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay, ease: 'easeOut' }}
     >
       <Box css={{ display: 'flex', ai: 'baseline', gap: 8 }}>
         <span ref={companyRef} style={{ fontSize: 14, fontWeight: 500, color: 'var(--colors-gray12)', fontFamily: 'var(--fonts-body)', flexShrink: 0 }}>{company}</span>
@@ -62,13 +141,13 @@ function WorkEntry({ company, title, start, end }: WorkEntryProps) {
           data-platform="work"
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ duration: 0.6, ease: 'easeOut', delay: 0.35 }}
+          transition={{ duration: 0.6, ease: 'easeOut', delay: delay + 0.35 }}
           style={{ flex: 1, display: 'block', borderBottom: '1px solid var(--colors-gray5)', marginBottom: 3, transformOrigin: 'left' }}
         />
         <motion.span
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.15, delay: 0.5 }}
+          transition={{ duration: 0.15, delay: delay + 0.5 }}
           style={{ flexShrink: 0 }}
         >
           <span ref={dateRef} style={{ fontSize: 13, color: 'var(--colors-gray9)', fontFamily: 'var(--fonts-body)', whiteSpace: 'nowrap' }}>{start} – {end}</span>
@@ -353,13 +432,16 @@ function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivE
       await sleep(150)
       if (cancelled) return
       setDisplay(MUSH_LOOK_UP)
-      await sleep(1100)
+      await sleep(900)
       if (cancelled) return
-      await Promise.all([
-        animate(xMotion,      w + 100, { duration: 0.45, ease: 'easeIn' }),
-        animate(rotateMotion, 0,       { duration: 0.45, ease: 'easeIn' }),
-      ])
-      if (!cancelled) setDone(true)
+
+      // Snap lean upright before bolting — animating rotation from -28→0 while
+      // easeIn position barely moves causes the left edge to drift left first.
+      rotateMotion.set(0)
+      startWalk()
+      await animate(xMotion, w + 100, { duration: 0.45, ease: [0.4, 0, 1, 1] })
+      stopWalk()
+      if (!cancelled) { sessionAnimPlayed = true; setDone(true) }
     }
 
     run()
@@ -938,9 +1020,23 @@ interface Props {
 }
 
 export default function Resume({ ogImages = {} }: Props) {
-  const contentRef  = useRef<HTMLDivElement>(null)
-  const mushWrapRef = useRef<HTMLDivElement>(null)
-  const [mushDone, setMushDone] = useState(sessionAnimPlayed)
+  const contentRef      = useRef<HTMLDivElement>(null)
+  const mushWrapRef     = useRef<HTMLDivElement>(null)
+  const [mushDone,     setMushDone]     = useState(sessionAnimPlayed)
+  // Gate the projects section until the work-entry text animations above finish.
+  // Work entries stagger up to ~0.33s delay + 0.25s duration + ~0.2s shuffle = ~0.8s.
+  // Waiting 900ms lets everything settle before projects appears.
+  const [currentlyAnimDone,  setCurrentlyAnimDone]  = useState(false)
+  const [textAnimDone,       setTextAnimDone]       = useState(false)
+  const [skillsAnimDone,     setSkillsAnimDone]     = useState(false)
+  const [educationAnimDone,  setEducationAnimDone]  = useState(false)
+  useEffect(() => {
+    const t1 = setTimeout(() => setCurrentlyAnimDone(true),  650)
+    const t2 = setTimeout(() => setTextAnimDone(true),       900)
+    const t3 = setTimeout(() => setSkillsAnimDone(true),    1300)
+    const t4 = setTimeout(() => setEducationAnimDone(true), 1700)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4) }
+  }, [])
 
   return (
     <>
@@ -948,127 +1044,171 @@ export default function Resume({ ogImages = {} }: Props) {
       <div ref={contentRef} style={{ position: 'relative', zIndex: 2 }}>
 
       {/* Links */}
-      <Box css={{ mb: '$3', display: 'flex', gap: '$2', flexWrap: 'wrap', ai: 'center' }}>
-        <a href={`mailto:${resume.contact.email}`} style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
-          {resume.contact.email}
-        </a>
-        <Text size="13" css={{ color: '$gray7' }}>·</Text>
-        <a href={resume.contact.github} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
-          GitHub
-        </a>
-        <Text size="13" css={{ color: '$gray7' }}>·</Text>
-        <a href={resume.contact.linkedin} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
-          LinkedIn
-        </a>
-        <Text size="13" css={{ color: '$gray7' }}>·</Text>
-        <a href={resume.contact.x} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
-          X / Twitter
-        </a>
-      </Box>
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.04, ease: 'easeOut' }}
+      >
+        <Box css={{ mb: '$3', display: 'flex', gap: '$2', flexWrap: 'wrap', ai: 'center' }}>
+          <a href={`mailto:${resume.contact.email}`} style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
+            {resume.contact.email}
+          </a>
+          <Text size="13" css={{ color: '$gray7' }}>·</Text>
+          <a href={resume.contact.github} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
+            GitHub
+          </a>
+          <Text size="13" css={{ color: '$gray7' }}>·</Text>
+          <a href={resume.contact.linkedin} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
+            LinkedIn
+          </a>
+          <Text size="13" css={{ color: '$gray7' }}>·</Text>
+          <a href={resume.contact.x} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--colors-gray10)', fontFamily: 'var(--fonts-body)', transition: 'color 150ms ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '')}>
+            X / Twitter
+          </a>
+        </Box>
+      </motion.div>
 
       {/* Work */}
-      <SectionLabel>Experience</SectionLabel>
+      <AnimatedLabel delay={0.08}>Experience</AnimatedLabel>
       <Box css={{ display: 'flex', flexDirection: 'column', gap: '$3' }}>
-        {resume.work.map((job) => (
-          <WorkEntry key={`${job.company}-${job.start}`} {...job} />
+        {resume.work.map((job, i) => (
+          <WorkEntry key={`${job.company}-${job.start}`} {...job} delay={0.13 + i * 0.1} />
         ))}
       </Box>
 
       {/* Currently + Previously */}
-      <Box css={{ display: 'flex', gap: '$4', alignItems: 'flex-start', '@mobile': { flexDirection: 'column', gap: '$3' } }}>
-        <Box css={{ flex: 1 }}>
-          <SectionLabel css={{ mt: '$2' }}>Currently</SectionLabel>
-          <Box css={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {resume.currently.map((item) => (
-              <Text key={item.label} size="13" color="gray11" css={{ lineHeight: '20px' }}>
-                {item.href ? (
-                  <a href={item.href} target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'inherit', transition: 'color 150ms ease' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = '')}
-                  >{item.label}</a>
-                ) : item.label}
-              </Text>
-            ))}
-          </Box>
-        </Box>
+      <AnimatePresence>
+        {currentlyAnimDone && (
+          <motion.div
+            key="currently"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          >
+            <Box css={{ display: 'flex', gap: '$4', alignItems: 'flex-start', '@mobile': { flexDirection: 'column', gap: '$3' } }}>
+              <Box css={{ flex: 1 }}>
+                <AnimatedLabel>Currently</AnimatedLabel>
+                <Box css={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {resume.currently.map((item, i) => (
+                    <RevealLine key={item.label} label={item.label} href={item.href} delay={i * 0.07} />
+                  ))}
+                </Box>
+              </Box>
 
-        <Box css={{ flex: 1 }}>
-          <SectionLabel css={{ mt: '$2' }}>Previously</SectionLabel>
-          <Box css={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {resume.previously.map((item) => (
-              <Text key={item.label} size="13" color="gray11" css={{ lineHeight: '20px' }}>
-                {item.href ? (
-                  <a href={item.href} target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'inherit', transition: 'color 150ms ease' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = '')}
-                  >{item.label}</a>
-                ) : item.label}
-              </Text>
-            ))}
-          </Box>
-        </Box>
-      </Box>
+              <Box css={{ flex: 1 }}>
+                <AnimatedLabel>Previously</AnimatedLabel>
+                <Box css={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {resume.previously.map((item, i) => (
+                    <RevealLine key={item.label} label={item.label} href={item.href} delay={i * 0.06} />
+                  ))}
+                </Box>
+              </Box>
+            </Box>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mushroom + Projects — mushroom walks on the card top-border lines */}
       <div ref={mushWrapRef} style={{ position: 'relative', marginTop: 24, paddingTop: 72, overflow: 'hidden' }}>
         {!sessionAnimPlayed && (
-          <MushWalker wrapRef={mushWrapRef} onComplete={() => { sessionAnimPlayed = true; setMushDone(true) }} />
+          <MushWalker
+            wrapRef={mushWrapRef}
+            onComplete={() => setMushDone(true)}
+          />
         )}
 
-        <SectionLabel data-platform="projects" css={{ mt: '$2' }}>Projects</SectionLabel>
-        <Box css={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '$3',
-          mt: '$1',
-          '@mobile': { gridTemplateColumns: '1fr' },
-        }}>
-          {resume.projects.map((p, i) => (
-            <ProjectCard
-              key={p.title}
-              title={p.title}
-              description={p.description}
-              stack={p.stack}
-              href={p.href}
-              ogImage={ogImages[p.title] ?? null}
-              index={i}
-              mushPlat={i < 2}
-            />
-          ))}
-        </Box>
+        <AnimatePresence>
+          {textAnimDone && (
+            <motion.div
+              key="projects"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            >
+              <AnimatedLabel data-platform="projects">Projects</AnimatedLabel>
+              <Box css={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '$3',
+                mt: '$1',
+                '@mobile': { gridTemplateColumns: '1fr' },
+              }}>
+                {resume.projects.map((p, i) => (
+                  <ProjectCard
+                    key={p.title}
+                    title={p.title}
+                    description={p.description}
+                    stack={p.stack}
+                    href={p.href}
+                    ogImage={ogImages[p.title] ?? null}
+                    index={i}
+                    mushPlat={i < 2}
+                  />
+                ))}
+              </Box>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Skills */}
-      <SectionLabel>Skills</SectionLabel>
-      <Box css={{ mt: '$1' }}>
-        {SKILL_GROUPS.map((g, i) => (
-          <SkillGroup key={g.label} label={g.label} skills={g.skills} index={i} />
-        ))}
-      </Box>
+      <AnimatePresence>
+        {skillsAnimDone && (
+          <motion.div
+            key="skills"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          >
+            <AnimatedLabel>Skills</AnimatedLabel>
+            <Box css={{ mt: '$1' }}>
+              {SKILL_GROUPS.map((g, i) => (
+                <SkillGroup key={g.label} label={g.label} skills={g.skills} index={i} />
+              ))}
+            </Box>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Education */}
-      <SectionLabel>Education</SectionLabel>
-      {resume.education.map((e) => (
-        <Box key={e.school} css={{ mb: '$1' }}>
-          <Text size="14" css={{ fontWeight: 500, color: '$gray12' }}>{e.school}</Text>
-          <Text size="13" color="gray11" css={{ lineHeight: '20px', mt: 3 }}>
-            {e.degree} · {e.minor} · {e.start}–{e.end}
-          </Text>
-        </Box>
-      ))}
+      <AnimatePresence>
+        {educationAnimDone && (
+          <motion.div
+            key="education"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          >
+            <AnimatedLabel>Education</AnimatedLabel>
+            {resume.education.map((e, i) => (
+              <motion.div
+                key={e.school}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: i * 0.08, ease: 'easeOut' }}
+              >
+                <Box css={{ mb: '$1' }}>
+                  <Text size="14" css={{ fontWeight: 500, color: '$gray12' }}>{e.school}</Text>
+                  <Text size="13" color="gray11" css={{ lineHeight: '20px', mt: 3 }}>
+                    {e.degree} · {e.minor} · {e.start}–{e.end}
+                  </Text>
+                </Box>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Box css={{ height: '$4' }} />
-      <LineBuddies containerRef={contentRef} triggered={mushDone} />
+      <LineBuddies containerRef={contentRef} triggered={mushDone && educationAnimDone} />
       </div>
     </>
   )
