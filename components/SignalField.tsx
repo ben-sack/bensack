@@ -4,6 +4,7 @@ import { useTheme } from 'next-themes'
 // ─── Modes ─────────────────────────────────────────────────────────────────────
 export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'bots'
 export type BotEffect  = 'none' | 'rain' | 'stars'
+export type BotScene   = 'nature' | 'city'
 
 // ─── Character ramps ───────────────────────────────────────────────────────────
 const DENSITY_RAMP = [' ', '.', ':', ';', '=', '+', 'x', '#', '@'] as const
@@ -249,12 +250,17 @@ function generateCity(cols: number, rows: number): ArtCell[] {
   }
 
   // ── Stars ─────────────────────────────────────────────────────────────────────
+  // fract(sin·43758) hash — amplifies tiny input differences, no visible tiling
+  function starHash(c: number, r: number, salt: number): number {
+    const v = Math.sin(c * 12.9898 + r * 78.233 + salt * 37.719) * 43758.5453
+    return v - Math.floor(v)
+  }
   for (let r = 1; r < Math.floor(rows * 0.50); r++) {
     for (let c = 0; c < cols; c++) {
       if (c < 12 && r < 8) continue
-      const hash = Math.abs(Math.sin(c * 127.3 + r * 311.7))
-      if (hash > 0.987) set(r, c, '*')
-      else if (hash > 0.982) set(r, c, '.')
+      const h = starHash(c, r, 0)
+      if (h > 0.988) set(r, c, starHash(c, r, 1) > 0.25 ? '*' : '·')
+      else if (h > 0.974) set(r, c, '.')
     }
   }
 
@@ -437,6 +443,260 @@ function generateCity(cols: number, rows: number): ArtCell[] {
 }
 
 
+// ─── City platform extractor ───────────────────────────────────────────────────
+// Mirrors the bldH / bldWidths / drawLayer calls in generateCity so physics
+// platforms land exactly on building rooftops in city bots scene.
+function generateCityPlatforms(cols: number, rows: number, cellW: number, cellH: number): Platform[] {
+  function bldH(b: number, n: number, maxH: number, minH: number, seed: number): number {
+    const t     = n > 1 ? b / (n - 1) : 0.5
+    const edge  = 0.45 + 0.55 * (1.0 - Math.pow(Math.abs(2 * t - 1), 2.5))
+    const v1    = 0.5 + 0.5 * Math.sin(b * 1.7183 + seed * 2.3)
+    const v2    = 0.5 + 0.5 * Math.cos(b * 2.7183 + seed * 1.1 + 0.7)
+    const v3    = 0.5 + 0.5 * Math.sin(b * 0.9001 + seed * 3.7 + 2.1)
+    const noise = Math.abs(Math.sin(b * 73.1 + seed * 5.3 + 1.9))
+    const v     = (v1 * 0.30 + v2 * 0.25 + v3 * 0.20 + noise * 0.25) * edge
+    return Math.max(minH, Math.round(v * (maxH - minH) + minH))
+  }
+  function bldWidths(n: number, seed: number): number[] {
+    const raw    = Array.from({ length: n }, (_, b) => {
+      const a  = 0.4 + 0.8 * Math.abs(Math.sin(b * 41.3 + seed * 3.7))
+      const bv = 0.4 + 0.6 * Math.abs(Math.cos(b * 17.9 + seed * 2.1))
+      return (a + bv) / 2
+    })
+    const sum    = raw.reduce((s, v) => s + v, 0)
+    const usable = cols - (n - 1)
+    let used     = 0
+    return raw.map((v, i) => {
+      if (i === n - 1) return Math.max(3, usable - used)
+      const w = Math.max(3, Math.round(v / sum * usable))
+      used += w
+      return w
+    })
+  }
+  function layerPlatforms(baseRow: number, numBlds: number, maxH: number, minH: number, seed: number, minW: number): Platform[] {
+    const n   = Math.min(numBlds, Math.floor((cols + 1) / 4))
+    const bw  = bldWidths(n, seed)
+    let cur   = 0
+    const out: Platform[] = []
+    for (let b = 0; b < n; b++) {
+      const w    = bw[b]
+      const h    = bldH(b, n, maxH, minH, seed)
+      const topR = baseRow - h + 1
+      if (w >= minW) out.push({ x: cur * cellW, y: topR * cellH, w: w * cellW })
+      cur += w + 1
+    }
+    return out
+  }
+
+  return [
+    // Street — full-width ground at the near-layer base row
+    { x: 0, y: Math.floor(rows * 0.84) * cellH, w: cols * cellW },
+    // Near building rooftops (≥4 cols wide — fits a buddy)
+    ...layerPlatforms(Math.floor(rows * 0.84), 9,  Math.floor(rows * 0.18), 3, 23.0, 4),
+    // Main skyline high perches (only wide buildings ≥6 cols)
+    ...layerPlatforms(Math.floor(rows * 0.68), 10, Math.floor(rows * 0.30), 4, 12.0, 6),
+  ]
+}
+
+// ─── Nature platform generator ────────────────────────────────────────────────
+// Three-tier invisible terrain: upper ridge → mid ridge → ground.
+// Each tier has deliberate horizontal gaps so buddies can fall through to the
+// next tier via staircase connectors placed in those gaps. This gives buddies a
+// natural circulation path: they accumulate uphill, then eventually descend.
+//
+// Layout (% of screen width):
+//   Upper:   [1-25%] gap [67-75%] gap [75-99%]   ← two far-side segments
+//   Mid:     gap [27-73%] gap                     ← one wide center
+//   Steps A: left gap → mid → left mid-gap → ground
+//   Steps B: right gap → mid → right mid-gap → ground
+function generateNaturePlatforms(cols: number, rows: number, cellW: number, cellH: number): Platform[] {
+  const H  = rows * cellH
+  const W  = cols * cellW
+  const ch = cellH
+
+  const pf: Platform[] = [{ x: 0, y: Math.floor(H * 0.88), w: W }]
+
+  if (W < 640) return pf  // mobile: ground only
+
+  // ── Upper ridge — two far-side segments ────────────────────────────────────
+  // Gaps at ~25-67% (center) let buddies rain down to the staircase steps.
+  // Slight height variation between segments creates a rolling-hill silhouette.
+  const uY = Math.floor(rows * 0.60) * ch
+  pf.push({ x: Math.floor(W * 0.01), y: uY - ch,  w: Math.floor(W * 0.24) })  // left:  1–25%
+  pf.push({ x: Math.floor(W * 0.75), y: uY,        w: Math.floor(W * 0.24) })  // right: 75–99%
+
+  // ── Mid ridge — one wide central platform ──────────────────────────────────
+  // Positioned so its left edge (~27%) aligns with descent-A exit and its
+  // right edge (~73%) aligns with descent-B exit.
+  const mY = Math.floor(rows * 0.76) * ch
+  pf.push({ x: Math.floor(W * 0.27), y: mY,        w: Math.floor(W * 0.46) })  // center: 27–73%
+
+  // ── Descent A — left-side staircase (upper → mid → ground) ────────────────
+  // Catches buddies falling off upper-left (ends ~25%), steps them right-down
+  // to mid-center (~27%), then again off mid-center left (~27%) to ground.
+  pf.push({ x: Math.floor(W * 0.25), y: Math.floor(H * 0.67), w: Math.floor(W * 0.09) })  // 25–34%
+  pf.push({ x: Math.floor(W * 0.32), y: Math.floor(H * 0.72), w: Math.floor(W * 0.08) })  // 32–40% → lands on mid-center
+  pf.push({ x: Math.floor(W * 0.13), y: Math.floor(H * 0.82), w: Math.floor(W * 0.15) })  // 13–28% → catches mid-left exit
+  pf.push({ x: Math.floor(W * 0.04), y: Math.floor(H * 0.86), w: Math.floor(W * 0.10) })  // 4–14%  → falls to ground
+
+  // ── Descent B — right-side staircase (upper → mid → ground) ───────────────
+  // Catches buddies falling off upper-right (starts ~75%), steps them left-down
+  // to mid-center (~73%), then again off mid-center right (~73%) to ground.
+  pf.push({ x: Math.floor(W * 0.66), y: Math.floor(H * 0.67), w: Math.floor(W * 0.09) })  // 66–75%
+  pf.push({ x: Math.floor(W * 0.58), y: Math.floor(H * 0.72), w: Math.floor(W * 0.09) })  // 58–67% → lands on mid-center
+  pf.push({ x: Math.floor(W * 0.72), y: Math.floor(H * 0.82), w: Math.floor(W * 0.15) })  // 72–87% → catches mid-right exit
+  pf.push({ x: Math.floor(W * 0.85), y: Math.floor(H * 0.86), w: Math.floor(W * 0.10) })  // 85–95% → falls to ground
+
+  return pf
+}
+
+// ─── Nature scene generator ────────────────────────────────────────────────────
+function generateNature(cols: number, rows: number): ArtCell[] {
+  const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(' '))
+  function set(r: number, c: number, ch: string) {
+    if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = ch
+  }
+  function setIfEmpty(r: number, c: number, ch: string) {
+    if (r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] === ' ') grid[r][c] = ch
+  }
+  // Same fract-sin hash used for city stars, different salts → different pattern
+  function fh(c: number, r: number, s: number): number {
+    const v = Math.sin(c * 12.9898 + r * 78.233 + s * 37.719) * 43758.5453
+    return v - Math.floor(v)
+  }
+
+  // ── Stars ────────────────────────────────────────────────────────────────────
+  for (let r = 1; r < Math.floor(rows * 0.44); r++) {
+    for (let c = 0; c < cols; c++) {
+      if (c < 8 && r < 7) continue
+      const hv = fh(c, r, 7)   // salt 7 → different layout from city stars
+      if      (hv > 0.988) set(r, c, fh(c, r, 8) > 0.3 ? '*' : '·')
+      else if (hv > 0.974) set(r, c, '.')
+    }
+  }
+
+  // ── Crescent moon (upper-left; city puts it upper-right) ─────────────────────
+  set(2, 4, '('); set(2, 5, ')')
+  set(3, 3, '('); set(3, 5, ')'); set(3, 6, '.')
+  set(4, 4, '('); set(4, 5, ')')
+
+  // ── Mountain helper ──────────────────────────────────────────────────────────
+  // Draws a filled triangular peak: '^' tip, '/' '\' slopes, ':' snow, '.' rock
+  function drawPeak(cx: number, baseR: number, h: number, snowRows: number) {
+    for (let i = 0; i <= h; i++) {
+      const r = baseR - h + i
+      if (r < 0 || r >= rows) continue
+      if (i === 0) {
+        set(r, cx, '^')
+      } else {
+        set(r, cx - i, '/')
+        set(r, cx + i, '\\')
+        for (let x = cx - i + 1; x < cx + i; x++) {
+          if (i <= snowRows)            set(r, x, ':')
+          else if (fh(x, r, 99) > 0.6) set(r, x, '.')   // sparse rock texture
+        }
+      }
+    }
+  }
+
+  // ── Distant mountains ────────────────────────────────────────────────────────
+  const farBase = Math.floor(rows * 0.54)
+  const farN    = 7
+  for (let i = 0; i < farN; i++) {
+    const cx = Math.floor((i + 0.4 + fh(i, 0, 22) * 0.2) / farN * cols)
+    const h  = 3 + Math.floor(fh(i, 0, 23) * Math.floor(rows * 0.10))
+    drawPeak(cx, farBase, h, 0)
+  }
+
+  // ── Main mountains ───────────────────────────────────────────────────────────
+  const mtnBase = Math.floor(rows * 0.67)
+  const mtnN    = 4 + Math.floor(fh(0, 0, 31) * 2)
+  for (let i = 0; i < mtnN; i++) {
+    const cx   = Math.floor((i + 0.4 + fh(i, 0, 32) * 0.2) / mtnN * cols)
+    const minH = Math.floor(rows * 0.12)
+    const maxH = Math.floor(rows * 0.24)
+    const h    = minH + Math.floor(fh(i, 0, 33) * (maxH - minH))
+    drawPeak(cx, mtnBase, h, Math.max(0, Math.floor(h * 0.28)))
+  }
+
+  // ── Valley floor / meadow ────────────────────────────────────────────────────
+  // Fills the space between the mountain bases and the tree line so the
+  // landscape reads as continuous terrain rather than empty canvas.
+  const meadowTop = Math.floor(rows * 0.69)
+  const treeBaseForMeadow = Math.floor(rows * 0.81)
+
+  // Rolling hill silhouette — a gentle `~` wave sits just below the near mountains
+  for (let c = 0; c < cols; c++) {
+    const ripple = Math.sin(c * 0.18 + 2.1) * 1.8 + Math.sin(c * 0.07 + 0.4) * 1.4
+    const r = meadowTop + Math.round(ripple)
+    setIfEmpty(r, c, '~')
+  }
+
+  // Sparse ground texture — density increases from hill line down to trees
+  for (let r = meadowTop + 2; r < treeBaseForMeadow; r++) {
+    const t = (r - meadowTop) / (treeBaseForMeadow - meadowTop)   // 0 → 1
+    for (let c = 0; c < cols; c++) {
+      const h = fh(c, r, 61)
+      const thresh = 0.90 - t * 0.32   // 0.90 at top → 0.58 near trees
+      if (h > thresh) {
+        const h2 = fh(c, r, 62)
+        setIfEmpty(r, c, h2 > 0.65 ? '\'' : h2 > 0.30 ? ',' : '.')
+      }
+    }
+  }
+
+  // ── Pine trees ───────────────────────────────────────────────────────────────
+  const treeBase = Math.floor(rows * 0.81)
+
+  function drawPine(cx: number, h: number) {
+    setIfEmpty(treeBase - h, cx, '*')
+    for (let i = 1; i <= h; i++) {
+      const r = treeBase - h + i
+      setIfEmpty(r, cx - i, '/')
+      setIfEmpty(r, cx, '|')            // centre spine
+      setIfEmpty(r, cx + i, '\\')
+    }
+    setIfEmpty(treeBase + 1, cx, '|')  // trunk below canopy
+  }
+
+  function drawRound(cx: number) {
+    setIfEmpty(treeBase - 2, cx - 1, '(')
+    setIfEmpty(treeBase - 2, cx,     '~')
+    setIfEmpty(treeBase - 2, cx + 1, '~')
+    setIfEmpty(treeBase - 2, cx + 2, ')')
+    setIfEmpty(treeBase - 1, cx,     '|')
+    setIfEmpty(treeBase - 1, cx + 1, '|')
+  }
+
+  let tc = 2 + Math.floor(fh(0, 0, 41) * 4)
+  while (tc < cols - 6) {
+    const roll = fh(tc, 0, 42)
+    if (roll > 0.35) {
+      const h = 2 + Math.floor(fh(tc, 1, 43) * 3)   // pine, height 2-4
+      drawPine(tc + h + 1, h)
+      tc += (h + 1) * 2 + 3 + Math.floor(fh(tc, 2, 44) * 4)
+    } else if (roll > 0.12) {
+      drawRound(tc + 1)
+      tc += 6 + Math.floor(fh(tc, 3, 45) * 5)
+    } else {
+      tc += 2 + Math.floor(fh(tc, 4, 46) * 3)
+    }
+  }
+
+  // ── Ground line with sparse grass tufts ──────────────────────────────────────
+  const groundRow = Math.floor(rows * 0.84)
+  for (let c = 0; c < cols; c++) set(groundRow, c, '_')
+  for (let c = 1; c < cols - 1; c++) {
+    if (fh(c, 0, 51) > 0.72) setIfEmpty(groundRow - 1, c, '\'')
+  }
+
+  const cells: ArtCell[] = []
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] !== ' ') cells.push({ col: c, row: r, ch: grid[r][c] })
+  return cells
+}
+
 // ─── Stateful mode types ────────────────────────────────────────────────────────
 interface RainCol {
   leadY:    number
@@ -454,14 +714,15 @@ interface ConstellationStar {
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
-interface Props { mode: FieldMode; effect?: BotEffect }
+interface Props { mode: FieldMode; effect?: BotEffect; scene?: BotScene }
 
-export default function SignalField({ mode, effect }: Props) {
+export default function SignalField({ mode, effect, scene }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const mouseRef   = useRef({ x: -9999, y: -9999 })
   const isDarkRef  = useRef(false)
   const modeRef    = useRef<FieldMode>(mode)
   const effectRef  = useRef<BotEffect>('none')
+  const sceneRef   = useRef<BotScene>('nature')
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
@@ -469,6 +730,7 @@ export default function SignalField({ mode, effect }: Props) {
   useEffect(() => { isDarkRef.current = resolvedTheme === 'dark' }, [resolvedTheme])
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { effectRef.current = effect ?? 'none' }, [effect])
+  useEffect(() => { sceneRef.current = scene ?? 'nature' }, [scene])
 
   useEffect(() => {
     if (!mounted) return
@@ -486,7 +748,8 @@ export default function SignalField({ mode, effect }: Props) {
     let CELL_W = 11, CELL_H = 18
     // eslint-disable-next-line no-shadow
     let FONT = '12px Menlo, "Courier New", monospace'
-    let prevMode: FieldMode = modeRef.current
+    let prevMode:  FieldMode = modeRef.current
+    let prevScene: BotScene  = sceneRef.current
 
     // ── Mode state ─────────────────────────────────────────────────────────────
     let rainCols:     RainCol[]             = []
@@ -535,10 +798,45 @@ export default function SignalField({ mode, effect }: Props) {
     const dragHistory: Array<{ x: number; y: number; t: number }> = []
 
     // Scene cache – invalidated on resize
-    let cachedCity:  ArtCell[] | null = null
+    let cachedCity:        ArtCell[]           | null = null
+    let cachedCityPlats:   Platform[]          | null = null
+    let cityBgStars:       ConstellationStar[] | null = null
+    let cachedNature:      ArtCell[]           | null = null
+    let cachedNaturePlats: Platform[]          | null = null
+    let natureBgStars:     ConstellationStar[] | null = null
 
     function invalidateSceneCache() {
-      cachedCity  = null
+      cachedCity        = null
+      cachedCityPlats   = null
+      cityBgStars       = null
+      cachedNature      = null
+      cachedNaturePlats = null
+      natureBgStars     = null
+    }
+
+    function makeBgAnim(cells: ArtCell[]): ConstellationStar[] {
+      return cells.map(cell => ({
+        x:    Math.random() * W,
+        y:    Math.random() * H,
+        vx:   (Math.random() - 0.5) * 3,
+        vy:   (Math.random() - 0.5) * 3,
+        tx:   cell.col * CELL_W,
+        ty:   cell.row * CELL_H,
+        ch:   cell.ch,
+        free: false,
+        rate: 0.010 + Math.random() * 0.006,
+      }))
+    }
+
+    function initCityBgAnim() {
+      if (!cachedCity) cachedCity = generateCity(cols, rows)
+      const streetRow = Math.floor(rows * 0.84)
+      cityBgStars = makeBgAnim(cachedCity.filter(cell => cell.row < streetRow))
+    }
+
+    function initNatureBgAnim() {
+      if (!cachedNature) cachedNature = generateNature(cols, rows)
+      natureBgStars = makeBgAnim(cachedNature)
     }
 
     // ── Init functions ──────────────────────────────────────────────────────────
@@ -636,8 +934,19 @@ export default function SignalField({ mode, effect }: Props) {
     }
 
     function initBots() {
-      setupPlatforms()
-      setupGroundProps()
+      if (sceneRef.current === 'city') {
+        setupPlatforms()
+        setupGroundProps()
+        if (!cachedCityPlats) cachedCityPlats = generateCityPlatforms(cols, rows, CELL_W, CELL_H)
+        platforms   = cachedCityPlats
+        groundProps = []
+        initCityBgAnim()
+      } else {
+        if (!cachedNaturePlats) cachedNaturePlats = generateNaturePlatforms(cols, rows, CELL_W, CELL_H)
+        platforms   = cachedNaturePlats
+        groundProps = []
+        initNatureBgAnim()
+      }
       setupPortal()
       initSky()
       particles = []
@@ -828,6 +1137,11 @@ export default function SignalField({ mode, effect }: Props) {
       if (m === 'rain') initRain()
       if (m === 'city') initCity(now)
       if (m === 'bots') {
+        cachedCity      = null   // all backdrop caches must regenerate at new dimensions
+        cachedCityPlats = null
+        cityBgStars     = null
+        cachedNature    = null
+        natureBgStars   = null
         initBots()
         if (effectRef.current === 'stars') initStars()
         else if (effectRef.current === 'rain') initBotsRain()
@@ -1442,40 +1756,119 @@ export default function SignalField({ mode, effect }: Props) {
       c2d.font = FONT
       c2d.textBaseline = 'top'
 
-      // ── Background texture — faint drifting density field ──────────────────
-      {
-        const bgT   = now / 1000 * 0.15
-        const alpha = dark ? 0.038 : 0.030
-        c2d.fillStyle = dark ? `rgba(255,255,255,${alpha})` : `rgba(30,30,30,${alpha})`
-        for (let row = 0; row < rows; row++) {
-          for (let col = 0; col < cols; col++) {
-            const v = densityField(col / cols, row / rows, bgT)
-            if (v > 0.28) {
-              c2d.fillText(v > 0.65 ? ':' : v > 0.46 ? '·' : '.', col * CELL_W, row * CELL_H)
-            }
+      if (sceneRef.current === 'city') {
+        // ── City backdrop — builds in with spring animation, then static ──────
+        if (!cachedCity) cachedCity = generateCity(cols, rows)
+        const streetRow = Math.floor(rows * 0.84)
+
+        if (cityBgStars) {
+          // Spring phase: each cell converges from a random start position
+          type SR = { x: number; y: number; ch: string }
+          const farBkt:  SR[] = []
+          const midBkt:  SR[] = []
+          const nearBkt: SR[] = []
+          let settled = 0
+
+          for (const star of cityBgStars) {
+            star.vx += (star.tx - star.x) * star.rate
+            star.vy += (star.ty - star.y) * star.rate
+            star.vx *= 0.92
+            star.vy *= 0.92
+            star.x  += star.vx
+            star.y  += star.vy
+
+            const dx   = star.x - star.tx
+            const dy   = star.y - star.ty
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            if (dist < 3) settled++
+
+            const col = Math.round(star.x / CELL_W)
+            const row = Math.round(star.y / CELL_H)
+            if (col < 0 || col >= cols || row < 0 || row >= rows) continue
+            const px = col * CELL_W, py = row * CELL_H
+
+            if      (dist < 20) nearBkt.push({ x: px, y: py, ch: star.ch })
+            else if (dist < 90) midBkt.push({ x: px, y: py, ch: star.ch })
+            else                farBkt.push({ x: px, y: py, ch: star.ch })
+          }
+
+          if (farBkt.length  > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.05)'
+            for (const s of farBkt)  c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (midBkt.length  > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.09)'
+            for (const s of midBkt)  c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (nearBkt.length > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+            for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
+          }
+
+          // Hand off to static once 95% of cells have converged
+          if (settled > cityBgStars.length * 0.95) cityBgStars = null
+        } else {
+          // Static phase after animation completes
+          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+          for (const cell of cachedCity) {
+            if (cell.row >= streetRow) continue
+            c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
           }
         }
-      }
-
-      // ── Sky background ─────────────────────────────────────────────────────
-      if (dark) {
-        c2d.fillStyle = 'rgba(255,255,255,0.08)'
-        for (const s of skyDarkStars)   c2d.fillText(s.ch, s.x, s.y)
-        c2d.fillStyle = 'rgba(255,255,255,0.22)'
-        for (const s of skyDarkMoon)    c2d.fillText(s.ch, s.x, s.y)
       } else {
-        // Drift clouds, wrap at both edges
-        for (const cloud of skyLightClouds) {
-          cloud.ox += cloud.vx * dt
-          if (cloud.baseX + cloud.ox > W + 200)  cloud.ox -= W + 400
-          if (cloud.baseX + cloud.ox < -200)      cloud.ox += W + 400
+        // ── Nature backdrop — spring animation then static ──────────────────
+        if (!cachedNature) cachedNature = generateNature(cols, rows)
+
+        if (natureBgStars) {
+          type SR = { x: number; y: number; ch: string }
+          const farBkt:  SR[] = []
+          const midBkt:  SR[] = []
+          const nearBkt: SR[] = []
+          let settled = 0
+
+          for (const star of natureBgStars) {
+            star.vx += (star.tx - star.x) * star.rate
+            star.vy += (star.ty - star.y) * star.rate
+            star.vx *= 0.92
+            star.vy *= 0.92
+            star.x  += star.vx
+            star.y  += star.vy
+
+            const dx   = star.x - star.tx
+            const dy   = star.y - star.ty
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            if (dist < 3) settled++
+
+            const col = Math.round(star.x / CELL_W)
+            const row = Math.round(star.y / CELL_H)
+            if (col < 0 || col >= cols || row < 0 || row >= rows) continue
+            const px = col * CELL_W, py = row * CELL_H
+
+            if      (dist < 20) nearBkt.push({ x: px, y: py, ch: star.ch })
+            else if (dist < 90) midBkt.push({ x: px, y: py, ch: star.ch })
+            else                farBkt.push({ x: px, y: py, ch: star.ch })
+          }
+
+          if (farBkt.length  > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.05)'
+            for (const s of farBkt)  c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (midBkt.length  > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.09)'
+            for (const s of midBkt)  c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (nearBkt.length > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+            for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
+          }
+
+          if (settled > natureBgStars.length * 0.95) natureBgStars = null
+        } else {
+          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+          for (const cell of cachedNature) {
+            c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
+          }
         }
-        c2d.fillStyle = 'rgba(30,30,30,0.42)'
-        for (const cloud of skyLightClouds) {
-          for (const s of cloud.cells) c2d.fillText(s.ch, s.x + cloud.ox, s.y)
-        }
-        c2d.fillStyle = 'rgba(30,30,30,0.48)'
-        for (const s of skyLightBirds)  c2d.fillText(s.ch, s.x, s.y)
       }
 
       const eff = effectRef.current
@@ -1536,37 +1929,26 @@ export default function SignalField({ mode, effect }: Props) {
         }
       }
 
-      // Draw platforms — individual fillText calls so CELL_W grid spacing is
-      // honoured; a single long string would render at natural font advance width
-      // (~7 px) not the 11 px cell, causing the floor to appear short.
-      for (const plat of platforms) {
-        const isGround   = plat === platforms[0]
-        const charCount  = Math.max(1, Math.floor(plat.w / CELL_W))
-        // Surface — slightly brighter for elevated platforms
-        c2d.fillStyle = dark
-          ? `rgba(255,255,255,${isGround ? 0.13 : 0.20})`
-          : `rgba(30,30,30,${isGround ? 0.10 : 0.17})`
-        for (let j = 0; j < charCount; j++) {
-          c2d.fillText('─', plat.x + j * CELL_W, plat.y)
-        }
-        // Support pillars hanging below elevated platforms
-        if (!isGround && charCount > 2) {
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.10)' : 'rgba(30,30,30,0.08)'
-          for (let d = 1; d <= 3; d++) {
-            c2d.fillText('|', plat.x,                           plat.y + d * CELL_H)
-            c2d.fillText('|', plat.x + (charCount - 1) * CELL_W, plat.y + d * CELL_H)
+      // Draw platforms — city: nearly invisible street lines; nature: fully hidden
+      // (physics still runs on these platforms either way)
+      if (sceneRef.current === 'city') {
+        c2d.fillStyle = dark ? 'rgba(255,255,255,0.04)' : 'rgba(30,30,30,0.03)'
+        for (const plat of platforms) {
+          const charCount = Math.max(1, Math.floor(plat.w / CELL_W))
+          for (let j = 0; j < charCount; j++) {
+            c2d.fillText('─', plat.x + j * CELL_W, plat.y)
           }
         }
       }
+      // nature: platforms invisible — buddies appear to walk on the terrain
 
-      // ── Ground props ────────────────────────────────────────────────────────
-      if (platforms.length > 0) {
+      // ── Ground props — city mode only (lamp posts, benches don't belong in nature)
+      if (sceneRef.current === 'city' && platforms.length > 0) {
         const gY = platforms[0].y
         c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.16)'
         for (const prop of groundProps) {
           const baseY = prop.platY ?? gY
           for (let li = 0; li < prop.lines.length; li++) {
-            // Last line sits one cell above the platform surface
             const py = baseY - (prop.lines.length - li) * CELL_H
             c2d.fillText(prop.lines[li], prop.x, py)
           }
@@ -1854,6 +2236,22 @@ export default function SignalField({ mode, effect }: Props) {
           prevEffect = eff
           if (eff === 'stars') initStars()
           if (eff === 'rain')  initBotsRain()
+        }
+        // ── Bots scene (nature ↔ city) transitions ────────────────────────────
+        const sc = sceneRef.current
+        if (sc !== prevScene) {
+          prevScene = sc
+          if (sc === 'city') {
+            if (!cachedCityPlats) cachedCityPlats = generateCityPlatforms(cols, rows, CELL_W, CELL_H)
+            platforms   = cachedCityPlats
+            groundProps = []
+            initCityBgAnim()   // spring animation: cells build in from random positions
+          } else {
+            if (!cachedNaturePlats) cachedNaturePlats = generateNaturePlatforms(cols, rows, CELL_W, CELL_H)
+            platforms   = cachedNaturePlats
+            groundProps = []
+            initNatureBgAnim()
+          }
         }
       }
 

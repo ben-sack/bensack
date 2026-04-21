@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import SEO from '../components/SEO'
-import type { BotEffect } from '../components/SignalField'
+import type { BotEffect, BotScene } from '../components/SignalField'
 import { shuffleLetters } from '../lib/utils'
 
 const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
@@ -9,6 +9,11 @@ const SignalField = dynamic(() => import('../components/SignalField'), { ssr: fa
 const EFFECTS: { id: BotEffect; label: string }[] = [
   { id: 'rain',  label: 'rain'  },
   { id: 'stars', label: 'stars' },
+]
+
+const SCENES: { id: BotScene; label: string }[] = [
+  { id: 'nature', label: 'nature' },
+  { id: 'city',   label: 'city'   },
 ]
 
 
@@ -124,6 +129,7 @@ function TimeLocation() {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [effect, setEffect] = useState<BotEffect>('none')
+  const [scene,  setScene]  = useState<BotScene>('nature')
   const [mobile, setMobile]  = useState(false)
 
   useEffect(() => {
@@ -142,7 +148,7 @@ export default function Home() {
     <>
       <SEO description="Engineer. Maker. Venice." />
 
-      <SignalField mode="bots" effect={effect} />
+      <SignalField mode="bots" effect={effect} scene={scene} />
 
       <div style={{
         position:  'fixed',
@@ -174,33 +180,63 @@ export default function Home() {
           </p>
           <h1 className="vh">Ben Sack — Engineer building reliable systems. Currently at Databricks.</h1>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
-            <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em' }}>
-              scene
-            </span>
-            {EFFECTS.map(({ id, label }, i) => (
-              <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
-                <button
-                  onClick={() => setEffect(effect === id ? 'none' : id)}
-                  style={{
-                    fontSize:       11,
-                    fontFamily:     'var(--fonts-body)',
-                    textTransform:  'lowercase',
-                    letterSpacing:  '0.02em',
-                    color:          effect === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
-                    background:     'transparent',
-                    border:         0,
-                    cursor:         'pointer',
-                    padding:        mobile ? '8px 6px' : 0,
-                    margin:         mobile ? '-8px -6px' : 0,
-                    transition:     'color 150ms ease',
-                  }}
-                >
-                  {label}
-                </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                fx
               </span>
-            ))}
+              {EFFECTS.map(({ id, label }, i) => (
+                <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
+                  <button
+                    onClick={() => setEffect(effect === id ? 'none' : id)}
+                    style={{
+                      fontSize:       11,
+                      fontFamily:     'var(--fonts-body)',
+                      textTransform:  'lowercase',
+                      letterSpacing:  '0.02em',
+                      color:          effect === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                      background:     'transparent',
+                      border:         0,
+                      cursor:         'pointer',
+                      padding:        mobile ? '8px 6px' : 0,
+                      margin:         mobile ? '-8px -6px' : 0,
+                      transition:     'color 150ms ease',
+                    }}
+                  >
+                    {label}
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                world
+              </span>
+              {SCENES.map(({ id, label }, i) => (
+                <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
+                  <button
+                    onClick={() => setScene(id)}
+                    style={{
+                      fontSize:       11,
+                      fontFamily:     'var(--fonts-body)',
+                      textTransform:  'lowercase',
+                      letterSpacing:  '0.02em',
+                      color:          scene === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                      background:     'transparent',
+                      border:         0,
+                      cursor:         'pointer',
+                      padding:        mobile ? '8px 6px' : 0,
+                      margin:         mobile ? '-8px -6px' : 0,
+                      transition:     'color 150ms ease',
+                    }}
+                  >
+                    {label}
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
       </div>
     </>
