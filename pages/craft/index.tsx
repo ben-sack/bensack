@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Masonry from 'react-masonry-css'
 import SEO from '../../components/SEO'
 import Box from '../../components/Box'
@@ -6,6 +7,8 @@ import Text from '../../components/Text'
 import { css } from '../../stitches.config'
 import { craftItems } from '../../lib/data'
 import { slugify } from '../../lib/utils'
+
+const GenArt = dynamic(() => import('../../components/GenArt'), { ssr: false })
 
 // ─── Card styles ─────────────────────────────────────────────────────────────
 const cardCss = css({
@@ -39,12 +42,13 @@ const overlayGradient = css({
 interface CardProps {
   title: string
   date: string
-  src: string
+  src?: string
+  genArt?: { type: 'flow-field'; seed: number }
   id: string
   href?: string
 }
 
-function CraftCard({ title, date, src, id, href }: CardProps) {
+function CraftCard({ title, date, src, genArt, id, href }: CardProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const itemRef  = useRef<HTMLAnchorElement>(null)
   const [inView, setInView] = useState(false)
@@ -60,8 +64,9 @@ function CraftCard({ title, date, src, id, href }: CardProps) {
     return () => observer.disconnect()
   }, [])
 
-  const target = href !== undefined ? href : `/craft/${id}`
+  const isGenArt  = !!genArt
   const isExternal = href?.startsWith('https')
+  const target     = href !== undefined ? href : `/craft/${id}${isGenArt ? `?seed=${genArt!.seed.toString(16).padStart(6, '0')}` : ''}`
 
   return (
     <a
@@ -70,15 +75,27 @@ function CraftCard({ title, date, src, id, href }: CardProps) {
       className={cardCss()}
       target={isExternal ? '_blank' : undefined}
       rel={isExternal ? 'noopener noreferrer' : undefined}
-      onPointerEnter={() => videoRef.current?.play()}
+      onPointerEnter={() => !isGenArt && videoRef.current?.play()}
       onPointerLeave={() => {
-        if (videoRef.current) {
+        if (!isGenArt && videoRef.current) {
           videoRef.current.pause()
           videoRef.current.currentTime = 0
         }
       }}
     >
-      <video ref={videoRef} playsInline loop muted src={inView ? src : undefined} style={{ filter: 'none' }} />
+      {isGenArt ? (
+        // Gen art canvas — pauses when scrolled out of view
+        <div style={{ aspectRatio: '1 / 1', width: '100%' }} onClick={e => e.preventDefault()}>
+          <GenArt
+            type={genArt!.type}
+            seed={genArt!.seed}
+            paused={!inView}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+      ) : (
+        <video ref={videoRef} playsInline loop muted src={inView && src ? src : undefined} style={{ filter: 'none' }} />
+      )}
       <div className={overlayGradient()} data-overlay="" />
       <Box css={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: '12px 16px', zIndex: 2 }}>
         <Text size="14" weight="500" css={{ color: 'white', d: 'block', mb: 2 }}>{title}</Text>
@@ -92,22 +109,26 @@ function CraftCard({ title, date, src, id, href }: CardProps) {
 export default function Craft() {
   return (
     <>
-      <SEO title="Craft" description="Interactive components, shaders, and experiments." />
+      <SEO title="Craft" description="Interactive components, shaders, and generative art." />
       <Masonry
         breakpointCols={{ default: 3, 960: 2, 480: 1 }}
         className="grid"
         columnClassName="column"
       >
-        {craftItems.map((item) => (
-          <CraftCard
-            key={item.title}
-            title={item.title}
-            date={item.date}
-            src={item.src}
-            id={slugify(item.title)}
-            href={item.href}
-          />
-        ))}
+        {craftItems.map((item) => {
+          const id = slugify(item.title)
+          return (
+            <CraftCard
+              key={item.title}
+              title={item.title}
+              date={item.date}
+              src={item.src}
+              genArt={item.genArt as CardProps['genArt']}
+              id={id}
+              href={item.href}
+            />
+          )
+        })}
       </Masonry>
     </>
   )

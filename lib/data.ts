@@ -108,10 +108,13 @@ export const resume = {
 }
 
 // ─── Craft ───────────────────────────────────────────────────────────────────
+export type GenArtType = 'flow-field' | 'reaction-diffusion' | 'truchet' | 'charge-field' | 'curl-flow' | 'strange-attractor'   // extend as new algos are added
+
 export interface CraftItem {
   date: string
   title: string
-  src: string
+  src?: string
+  genArt?: { type: GenArtType; seed: number }
   component?: boolean
   href?: string
   wrap?: number | boolean
@@ -122,6 +125,15 @@ export interface CraftItem {
 }
 
 export const craftItems: CraftItem[] = [
+  { date: 'April 2025',   title: 'Flow Field I',        genArt: { type: 'flow-field',        seed: 0x1f4e8a } },
+  { date: 'April 2025',   title: 'Flow Field II',       genArt: { type: 'flow-field',        seed: 0xa3c7d2 } },
+  { date: 'April 2025',   title: 'Flow Field III',      genArt: { type: 'flow-field',        seed: 0x5e2b9f } },
+  { date: 'April 2025',   title: 'Charge Field I',      genArt: { type: 'charge-field',      seed: 0x46b54e } },
+  { date: 'April 2025',   title: 'Charge Field II',     genArt: { type: 'charge-field',      seed: 0x01c9e1 } },
+  { date: 'April 2025',   title: 'Charge Field III',    genArt: { type: 'charge-field',      seed: 0xb732e9 } },
+  { date: 'April 2025',   title: 'Curl Flow I',         genArt: { type: 'curl-flow',         seed: 0x5d6cbc } },
+  { date: 'April 2025',   title: 'Curl Flow II',        genArt: { type: 'curl-flow',         seed: 0x23cbfc } },
+  { date: 'April 2025',   title: 'Curl Flow III',       genArt: { type: 'curl-flow',         seed: 0x848c9d } },
   { date: 'January 2023', title: 'Beaded Necklace', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
   { date: 'January 2023', title: 'Leather Jacket', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
   { date: 'January 2023', title: 'Studded Belt', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
