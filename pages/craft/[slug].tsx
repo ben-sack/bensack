@@ -21,6 +21,7 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
 
   const [seed,    setSeed]    = useState(canonicalSeed)
   const [hud,     setHud]     = useState(true)
+  const [mobile,  setMobile]  = useState(false)
   const hudTimer  = useRef<ReturnType<typeof setTimeout>>()
 
   // Initialise seed from URL query once router is ready
@@ -67,6 +68,13 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
       window.removeEventListener('mousemove', show)
       clearTimeout(hudTimer.current)
     }
+  }, [])
+
+  useEffect(() => {
+    const sync = () => setMobile(window.innerWidth < 720)
+    sync()
+    window.addEventListener('resize', sync, { passive: true })
+    return () => window.removeEventListener('resize', sync)
   }, [])
 
   const downloadPng = useCallback(() => {
@@ -116,12 +124,13 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
         {/* Top-left — back + title */}
         <div style={{
           position:    'absolute',
-          top:          24,
-          left:         24,
+          top:          mobile ? 18 : 24,
+          left:         mobile ? 18 : 24,
           display:     'flex',
           alignItems:  'center',
-          gap:          16,
+          gap:          mobile ? 10 : 16,
           pointerEvents: 'auto',
+          maxWidth:     mobile ? 'calc(100vw - 156px)' : 'none',
         }}>
           <button
             onClick={() => router.push('/craft')}
@@ -131,46 +140,66 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
           >
             ← craft
           </button>
-          <span style={{ ...base, color: 'var(--colors-gray6)', cursor: 'default', pointerEvents: 'none' }}>·</span>
-          <span style={{ ...base, cursor: 'default', pointerEvents: 'none' }}>{title.toLowerCase()}</span>
+          {!mobile && <span style={{ ...base, color: 'var(--colors-gray6)', cursor: 'default', pointerEvents: 'none' }}>·</span>}
+          <span
+            style={{
+              ...base,
+              cursor: 'default',
+              pointerEvents: 'none',
+              maxWidth: mobile ? '100%' : 'none',
+              overflow: mobile ? 'hidden' : 'visible',
+              textOverflow: mobile ? 'ellipsis' : 'clip',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {title.toLowerCase()}
+          </span>
         </div>
 
-        {/* Bottom row — left: hint · right: seed + controls */}
+        {/* Controls */}
         <div style={{
           position:        'absolute',
-          bottom:           24,
-          left:             24,
-          right:            24,
+          top:             mobile ? 18 : 24,
+          right:           mobile ? 18 : 24,
           display:         'flex',
-          justifyContent:  'space-between',
+          flexDirection:   mobile ? 'column' : 'row',
           alignItems:      'center',
+          justifyContent:  'flex-end',
+          gap:             mobile ? 8 : 20,
           pointerEvents:   'auto',
         }}>
-          <span style={{ ...base, cursor: 'default', pointerEvents: 'none' }}>
-            space · click to reseed
+          <span style={{ ...base, cursor: 'default', pointerEvents: 'none', color: 'var(--colors-gray7)' }}>
+            {seed.toString(16).padStart(6, '0')}
           </span>
+          <button
+            onClick={reseed}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={e => (e.currentTarget.style.color = '')}
+            style={base}
+          >
+            reseed
+          </button>
+          <button
+            onClick={downloadPng}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--colors-gray12)')}
+            onMouseLeave={e => (e.currentTarget.style.color = '')}
+            style={base}
+          >
+            save png
+          </button>
+        </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <span style={{ ...base, cursor: 'default', pointerEvents: 'none', color: 'var(--colors-gray7)' }}>
-              {seed.toString(16).padStart(6, '0')}
-            </span>
-            <button
-              onClick={reseed}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-              onMouseLeave={e => (e.currentTarget.style.color = '')}
-              style={base}
-            >
-              reseed
-            </button>
-            <button
-              onClick={downloadPng}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--colors-gray12)')}
-              onMouseLeave={e => (e.currentTarget.style.color = '')}
-              style={base}
-            >
-              save png
-            </button>
-          </div>
+        {/* Hint */}
+        <div style={{
+          position:      'absolute',
+          bottom:        mobile ? 18 : 24,
+          left:          mobile ? 18 : 24,
+          right:         mobile ? 18 : 'auto',
+          pointerEvents: 'none',
+        }}>
+          <span style={{ ...base, cursor: 'default', color: 'var(--colors-gray7)' }}>
+            {mobile ? 'tap artwork to reseed' : 'space · click to reseed'}
+          </span>
         </div>
       </div>
     </>

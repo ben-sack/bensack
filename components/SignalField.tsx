@@ -3,7 +3,7 @@ import { useTheme } from 'next-themes'
 
 // ─── Modes ─────────────────────────────────────────────────────────────────────
 export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'bots'
-export type BotEffect  = 'none' | 'rain' | 'stars'
+export type BotEffect  = 'rain' | 'stars' | 'clouds'
 export type BotScene   = 'nature' | 'city'
 
 // ─── Character ramps ───────────────────────────────────────────────────────────
@@ -516,7 +516,25 @@ function generateNaturePlatforms(cols: number, rows: number, cellW: number, cell
 
   const pf: Platform[] = [{ x: 0, y: Math.floor(H * 0.88), w: W }]
 
-  if (W < 640) return pf  // mobile: ground only
+  if (W < 640) {
+    const uY = Math.floor(rows * 0.62) * ch
+    const mY = Math.floor(rows * 0.73) * ch
+
+    // Mobile: keep a simpler three-tier circulation path with two short stair runs.
+    pf.push({ x: Math.floor(W * 0.06), y: uY - ch,  w: Math.floor(W * 0.24) })  // upper-left perch
+    pf.push({ x: Math.floor(W * 0.70), y: uY,       w: Math.floor(W * 0.22) })  // upper-right perch
+    pf.push({ x: Math.floor(W * 0.30), y: mY,       w: Math.floor(W * 0.38) })  // mid-center ridge
+
+    // Left descent: upper-left → mid-center → ground
+    pf.push({ x: Math.floor(W * 0.24), y: Math.floor(H * 0.68), w: Math.floor(W * 0.12) })
+    pf.push({ x: Math.floor(W * 0.13), y: Math.floor(H * 0.81), w: Math.floor(W * 0.14) })
+
+    // Right descent: upper-right → mid-center → ground
+    pf.push({ x: Math.floor(W * 0.58), y: Math.floor(H * 0.68), w: Math.floor(W * 0.12) })
+    pf.push({ x: Math.floor(W * 0.74), y: Math.floor(H * 0.81), w: Math.floor(W * 0.14) })
+
+    return pf
+  }
 
   // ── Upper ridge — two far-side segments ────────────────────────────────────
   // Gaps at ~25-67% (center) let buddies rain down to the staircase steps.
@@ -714,14 +732,14 @@ interface ConstellationStar {
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
-interface Props { mode: FieldMode; effect?: BotEffect; scene?: BotScene }
+interface Props { mode: FieldMode; effect?: BotEffect[]; scene?: BotScene }
 
 export default function SignalField({ mode, effect, scene }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const mouseRef   = useRef({ x: -9999, y: -9999 })
   const isDarkRef  = useRef(false)
   const modeRef    = useRef<FieldMode>(mode)
-  const effectRef  = useRef<BotEffect>('none')
+  const effectRef  = useRef<BotEffect[]>([])
   const sceneRef   = useRef<BotScene>('nature')
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -729,7 +747,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
   useEffect(() => setMounted(true), [])
   useEffect(() => { isDarkRef.current = resolvedTheme === 'dark' }, [resolvedTheme])
   useEffect(() => { modeRef.current = mode }, [mode])
-  useEffect(() => { effectRef.current = effect ?? 'none' }, [effect])
+  useEffect(() => { effectRef.current = effect ?? [] }, [effect])
   useEffect(() => { sceneRef.current = scene ?? 'nature' }, [scene])
 
   useEffect(() => {
@@ -750,6 +768,10 @@ export default function SignalField({ mode, effect, scene }: Props) {
     let FONT = '12px Menlo, "Courier New", monospace'
     let prevMode:  FieldMode = modeRef.current
     let prevScene: BotScene  = sceneRef.current
+
+    function hasEffect(id: BotEffect) {
+      return effectRef.current.includes(id)
+    }
 
     // ── Mode state ─────────────────────────────────────────────────────────────
     let rainCols:     RainCol[]             = []
@@ -775,7 +797,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
     let rainActive:   boolean[]  = []
     let rainCloudRow: number[]   = []   // per-column cloud-bottom row (-1 = no cloud / dark mode)
     let rainSplash:   Particle[] = []
-    let prevEffect:  BotEffect  = 'none'
+    let prevEffect:  BotEffect[] = []
 
     // ── Sky background (pre-computed on resize) ────────────────────────────────
     type SC = { x: number; y: number; ch: string }
@@ -990,9 +1012,8 @@ export default function SignalField({ mode, effect, scene }: Props) {
 
     // ── Rain overlay init (sparse light rain for bots scene) ──────────────────
     function initBotsRain() {
-      const isDark = document.documentElement.classList.contains('dark')
-      // Dark: random columns active from top. Light: all inactive — cloud coverage activates them.
-      rainActive   = Array.from({ length: cols }, () => isDark ? Math.random() < 0.55 : false)
+      const useCloudSource = hasEffect('clouds')
+      rainActive   = Array.from({ length: cols }, () => useCloudSource ? false : Math.random() < 0.55)
       rainCloudRow = new Array(cols).fill(-1)
       rainCols     = Array.from({ length: cols }, () => ({
         leadY:    Math.random() * rows * 1.2 - rows * 0.15,   // stagger: some already falling
@@ -1042,6 +1063,14 @@ export default function SignalField({ mode, effect, scene }: Props) {
       skyDarkMoon.push({ x: moonX,              y: moonY + CELL_H,     ch: '(' })
       skyDarkMoon.push({ x: moonX + CELL_W * 2, y: moonY + CELL_H,     ch: '.' })
       skyDarkMoon.push({ x: moonX + CELL_W,     y: moonY + CELL_H * 2, ch: '(' })
+
+      // Light: small sun glyph tucked high-right so it doesn't fight the copy block
+      const sunX = Math.floor(W * (W < 640 ? 0.82 : 0.86))
+      const sunY = Math.floor(H * (W < 640 ? 0.16 : 0.12))
+      skyLightSun.push({ x: sunX + CELL_W,     y: sunY,              ch: '.' })
+      skyLightSun.push({ x: sunX,              y: sunY + CELL_H,     ch: '(' })
+      skyLightSun.push({ x: sunX + CELL_W * 2, y: sunY + CELL_H,     ch: ')' })
+      skyLightSun.push({ x: sunX + CELL_W,     y: sunY + CELL_H * 2, ch: "'" })
 
       // Light: clouds — bubbly round style, varied sizes + drift speeds for depth
       // L = large/close (double-bump), M = medium, S = small/distant
@@ -1143,8 +1172,8 @@ export default function SignalField({ mode, effect, scene }: Props) {
         cachedNature    = null
         natureBgStars   = null
         initBots()
-        if (effectRef.current === 'stars') initStars()
-        else if (effectRef.current === 'rain') initBotsRain()
+        if (hasEffect('stars')) initStars()
+        if (hasEffect('rain')) initBotsRain()
       } else {
         setupPlatforms(); setupGroundProps()  // keep layout in sync on resize
       }
@@ -1509,6 +1538,9 @@ export default function SignalField({ mode, effect, scene }: Props) {
     // Full platformer physics: gravity, walking, jumping, platform collision.
     function drawBots(dt: number, now: number) {
       const dark    = isDarkRef.current
+      const starsOn = hasEffect('stars')
+      const rainOn = hasEffect('rain')
+      const cloudsOn = hasEffect('clouds')
       const mx      = mouseRef.current.x
       const my      = mouseRef.current.y
       const GRAVITY = 700               // px/s²
@@ -1756,6 +1788,43 @@ export default function SignalField({ mode, effect, scene }: Props) {
       c2d.font = FONT
       c2d.textBaseline = 'top'
 
+      // ── Sky layer ────────────────────────────────────────────────────────────
+      if (dark) {
+        c2d.fillStyle = 'rgba(255,255,255,0.28)'
+        for (const star of skyDarkStars) c2d.fillText(star.ch, star.x, star.y)
+
+        c2d.fillStyle = 'rgba(255,255,255,0.38)'
+        for (const cell of skyDarkMoon) c2d.fillText(cell.ch, cell.x, cell.y)
+
+        if (cloudsOn) {
+          c2d.fillStyle = 'rgba(255,255,255,0.08)'
+          for (const cloud of skyLightClouds) {
+            cloud.ox += cloud.vx * dt * 0.7
+            const span = W + Math.max(...cloud.cells.map((cell) => cell.x - cloud.baseX)) + CELL_W * 3
+            if (cloud.vx > 0 && cloud.baseX + cloud.ox > W + CELL_W * 3) cloud.ox = -span
+            if (cloud.vx < 0 && cloud.baseX + cloud.ox < -span * 0.35) cloud.ox = W + CELL_W * 3
+            for (const cell of cloud.cells) c2d.fillText(cell.ch, cell.x + cloud.ox, cell.y)
+          }
+        }
+      } else {
+        c2d.fillStyle = 'rgba(30,30,30,0.16)'
+        for (const cell of skyLightSun) c2d.fillText(cell.ch, cell.x, cell.y)
+
+        c2d.fillStyle = 'rgba(30,30,30,0.18)'
+        for (const bird of skyLightBirds) c2d.fillText(bird.ch, bird.x, bird.y)
+
+        if (cloudsOn) {
+          c2d.fillStyle = 'rgba(30,30,30,0.11)'
+          for (const cloud of skyLightClouds) {
+            cloud.ox += cloud.vx * dt
+            const span = W + Math.max(...cloud.cells.map((cell) => cell.x - cloud.baseX)) + CELL_W * 3
+            if (cloud.vx > 0 && cloud.baseX + cloud.ox > W + CELL_W * 3) cloud.ox = -span
+            if (cloud.vx < 0 && cloud.baseX + cloud.ox < -span * 0.35) cloud.ox = W + CELL_W * 3
+            for (const cell of cloud.cells) c2d.fillText(cell.ch, cell.x + cloud.ox, cell.y)
+          }
+        }
+      }
+
       if (sceneRef.current === 'city') {
         // ── City backdrop — builds in with spring animation, then static ──────
         if (!cachedCity) cachedCity = generateCity(cols, rows)
@@ -1871,10 +1940,8 @@ export default function SignalField({ mode, effect, scene }: Props) {
         }
       }
 
-      const eff = effectRef.current
-
       // ── Stars: shooting stars arc behind bots ────────────────────────────────
-      if (eff === 'stars') {
+      if (starsOn) {
         // Shooting star timer + spawn
         shootTimer -= dt
         if (shootTimer <= 0) {
@@ -2054,7 +2121,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
       }
 
       // ── Stars: explosion bursts in front of bots ────────────────────────────
-      if (eff === 'stars') {
+      if (starsOn) {
         for (let pi = cityBursts.length - 1; pi >= 0; pi--) {
           const p = cityBursts[pi]
           p.x    += p.vx * dt
@@ -2069,7 +2136,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
       }
 
       // ── Rain: sparse light rain with surface splashes ────────────────────────
-      if (eff === 'rain') {
+      if (rainOn) {
         // Update + render lingering splash chars (in front of bots)
         for (let pi = rainSplash.length - 1; pi >= 0; pi--) {
           const p = rainSplash[pi]
@@ -2083,8 +2150,8 @@ export default function SignalField({ mode, effect, scene }: Props) {
           c2d.fillText(p.ch, p.x, p.y)
         }
 
-        // Light mode: sync rainActive with current cloud positions each frame
-        if (!dark) {
+        // When clouds are active, make rain originate beneath their current positions.
+        if (cloudsOn) {
           rainCloudRow.fill(-1)
           for (const cloud of skyLightClouds) {
             let maxY = 0, minX = Infinity, maxX = -Infinity
@@ -2105,6 +2172,14 @@ export default function SignalField({ mode, effect, scene }: Props) {
               rainCols[c].leadY  = rainCloudRow[c]
             } else if (rainCloudRow[c] < 0 && rainActive[c]) {
               rainActive[c] = false
+            }
+          }
+        } else {
+          rainCloudRow.fill(-1)
+          for (let c = 0; c < cols; c++) {
+            if (!rainActive[c] && Math.random() < 0.02) {
+              rainActive[c] = true
+              rainCols[c].leadY = -(2 + Math.random() * 8)
             }
           }
         }
@@ -2135,7 +2210,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
                   })
                 }
               }
-              col.leadY = (!dark && rainCloudRow[ci] >= 0)
+              col.leadY = (rainCloudRow[ci] >= 0)
                 ? rainCloudRow[ci]
                 : -(1 + Math.random() * rows * 0.6)
               splashed  = true
@@ -2158,7 +2233,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
                   ch:   Math.random() < 0.5 ? "'" : '.',
                 })
               }
-              col.leadY = (!dark && rainCloudRow[ci] >= 0)
+              col.leadY = (rainCloudRow[ci] >= 0)
                 ? rainCloudRow[ci]
                 : -(1 + Math.random() * rows * 0.6)
               hitBot    = true
@@ -2169,7 +2244,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
 
           // Reset when fully off screen
           if (col.leadY - col.trailLen > rows) {
-            col.leadY    = (!dark && rainCloudRow[ci] >= 0)
+            col.leadY    = (rainCloudRow[ci] >= 0)
               ? rainCloudRow[ci]
               : -(1 + Math.random() * 4)
             col.speed    = 18 + Math.random() * 16
@@ -2217,7 +2292,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
           shootStars = []
           cityBursts = []
           rainSplash = []
-          prevEffect = 'none'
+          prevEffect = []
           document.body.style.cursor = ''
         }
         if (prevMode === 'city') { shootStars = []; cityBursts = [] }
@@ -2230,12 +2305,14 @@ export default function SignalField({ mode, effect, scene }: Props) {
       // ── Bots overlay effect transitions ──────────────────────────────────────
       if (m === 'bots') {
         const eff = effectRef.current
-        if (eff !== prevEffect) {
-          if (prevEffect === 'stars') { shootStars = []; cityBursts = [] }
-          if (prevEffect === 'rain')  rainSplash = []
-          prevEffect = eff
-          if (eff === 'stars') initStars()
-          if (eff === 'rain')  initBotsRain()
+        const changed = eff.length !== prevEffect.length || eff.some((id, i) => id !== prevEffect[i])
+        if (changed) {
+          const prev = prevEffect
+          if (prev.includes('stars') && !eff.includes('stars')) { shootStars = []; cityBursts = [] }
+          if (prev.includes('rain') && !eff.includes('rain'))  rainSplash = []
+          if (eff.includes('stars') && !prev.includes('stars')) initStars()
+          if (eff.includes('rain') && !prev.includes('rain')) initBotsRain()
+          prevEffect = [...eff]
         }
         // ── Bots scene (nature ↔ city) transitions ────────────────────────────
         const sc = sceneRef.current

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { useTheme } from 'next-themes'
 import SEO from '../components/SEO'
 import type { BotEffect, BotScene } from '../components/SignalField'
 import { shuffleLetters } from '../lib/utils'
@@ -7,6 +8,7 @@ import { shuffleLetters } from '../lib/utils'
 const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
 
 const EFFECTS: { id: BotEffect; label: string }[] = [
+  { id: 'clouds', label: 'clouds' },
   { id: 'rain',  label: 'rain'  },
   { id: 'stars', label: 'stars' },
 ]
@@ -128,9 +130,11 @@ function TimeLocation() {
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [effect, setEffect] = useState<BotEffect>('none')
+  const { resolvedTheme } = useTheme()
+  const [effects, setEffects] = useState<BotEffect[]>([])
   const [scene,  setScene]  = useState<BotScene>('nature')
   const [mobile, setMobile]  = useState(false)
+  const [effectTouched, setEffectTouched] = useState(false)
 
   useEffect(() => {
     const check = () => setMobile(window.innerWidth < 640)
@@ -144,11 +148,16 @@ export default function Home() {
     return () => { document.body.style.overflow = '' }
   }, [])
 
+  useEffect(() => {
+    if (effectTouched) return
+    setEffects(resolvedTheme === 'dark' ? ['clouds'] : [])
+  }, [resolvedTheme, effectTouched])
+
   return (
     <>
       <SEO description="Engineer. Maker. Venice." />
 
-      <SignalField mode="bots" effect={effect} scene={scene} />
+      <SignalField mode="bots" effect={effects} scene={scene} />
 
       <div style={{
         position:  'fixed',
@@ -189,13 +198,20 @@ export default function Home() {
                 <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
                   <button
-                    onClick={() => setEffect(effect === id ? 'none' : id)}
+                    onClick={() => {
+                      setEffectTouched(true)
+                      setEffects((current) =>
+                        current.includes(id)
+                          ? current.filter((effectId) => effectId !== id)
+                          : [...current, id]
+                      )
+                    }}
                     style={{
                       fontSize:       11,
                       fontFamily:     'var(--fonts-body)',
                       textTransform:  'lowercase',
                       letterSpacing:  '0.02em',
-                      color:          effect === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                      color:          effects.includes(id) ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
                       background:     'transparent',
                       border:         0,
                       cursor:         'pointer',
