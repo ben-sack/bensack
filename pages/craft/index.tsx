@@ -6,6 +6,7 @@ import Box from '../../components/Box'
 import Text from '../../components/Text'
 import { css } from '../../stitches.config'
 import { craftItems } from '../../lib/data'
+import type { GenArtType } from '../../lib/data'
 import { slugify } from '../../lib/utils'
 
 const GenArt = dynamic(() => import('../../components/GenArt'), { ssr: false })
@@ -41,14 +42,57 @@ const overlayGradient = css({
 
 interface CardProps {
   title: string
-  date: string
   src?: string
-  genArt?: { type: 'flow-field'; seed: number }
+  genArt?: { type: GenArtType; seed: number }
   id: string
   href?: string
 }
 
-function CraftCard({ title, date, src, genArt, id, href }: CardProps) {
+function compactLabel(title: string, genArt?: CardProps['genArt']) {
+  if (genArt) {
+    const seed = genArt.seed.toString(16).padStart(6, '0')
+    const prefix = {
+      'flow-field': 'Flow',
+      'charge-field': 'Charge',
+      'curl-flow': 'Curl',
+      'reaction-diffusion': 'Reaction',
+      'truchet': 'Truchet',
+      'strange-attractor': 'Attractor',
+    } satisfies Record<GenArtType, string>
+
+    return `${prefix[genArt.type]} ${seed}`
+  }
+
+  return title
+}
+
+function scatterItems<T extends { genArt?: { type: GenArtType } }>(items: T[]) {
+  const groups = new Map<GenArtType | 'other', T[]>()
+
+  for (const item of items) {
+    const key = item.genArt?.type ?? 'other'
+    const bucket = groups.get(key) ?? []
+    bucket.push(item)
+    groups.set(key, bucket)
+  }
+
+  const orderedGroups = Array.from(groups.entries())
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([, bucket]) => [...bucket])
+
+  const scattered: T[] = []
+
+  while (orderedGroups.some((bucket) => bucket.length > 0)) {
+    for (const bucket of orderedGroups) {
+      const next = bucket.shift()
+      if (next) scattered.push(next)
+    }
+  }
+
+  return scattered
+}
+
+function CraftCard({ title, src, genArt, id, href }: CardProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const itemRef  = useRef<HTMLAnchorElement>(null)
   const [inView, setInView] = useState(false)
@@ -67,6 +111,7 @@ function CraftCard({ title, date, src, genArt, id, href }: CardProps) {
   const isGenArt  = !!genArt
   const isExternal = href?.startsWith('https')
   const target     = href !== undefined ? href : `/craft/${id}${isGenArt ? `?seed=${genArt!.seed.toString(16).padStart(6, '0')}` : ''}`
+  const label      = compactLabel(title, genArt)
 
   return (
     <a
@@ -97,9 +142,32 @@ function CraftCard({ title, date, src, genArt, id, href }: CardProps) {
         <video ref={videoRef} playsInline loop muted src={inView && src ? src : undefined} style={{ filter: 'none' }} />
       )}
       <div className={overlayGradient()} data-overlay="" />
-      <Box css={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: '12px 16px', zIndex: 2 }}>
-        <Text size="14" weight="500" css={{ color: 'white', d: 'block', mb: 2 }}>{title}</Text>
-        <Text size="12" css={{ color: 'rgba(255,255,255,0.6)', d: 'block' }}>{date}</Text>
+      <Box
+        data-overlay=""
+        css={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          p: '12px 16px',
+          zIndex: 2,
+          opacity: 0,
+          transition: 'opacity 200ms ease',
+          pointerEvents: 'none',
+        }}
+      >
+        <Text
+          size="10"
+          weight="500"
+          css={{
+            color: 'rgba(255,255,255,0.9)',
+            d: 'block',
+            letterSpacing: '0.02em',
+            textTransform: 'lowercase',
+          }}
+        >
+          {label}
+        </Text>
       </Box>
     </a>
   )
@@ -107,6 +175,8 @@ function CraftCard({ title, date, src, genArt, id, href }: CardProps) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Craft() {
+  const items = scatterItems(craftItems)
+
   return (
     <>
       <SEO title="Craft" description="Interactive components, shaders, and generative art." />
@@ -115,13 +185,12 @@ export default function Craft() {
         className="grid"
         columnClassName="column"
       >
-        {craftItems.map((item) => {
+        {items.map((item) => {
           const id = slugify(item.title)
           return (
             <CraftCard
               key={item.title}
               title={item.title}
-              date={item.date}
               src={item.src}
               genArt={item.genArt as CardProps['genArt']}
               id={id}

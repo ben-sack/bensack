@@ -134,6 +134,14 @@ export const craftItems: CraftItem[] = [
   { date: 'April 2025',   title: 'Curl Flow I',         genArt: { type: 'curl-flow',         seed: 0x5d6cbc } },
   { date: 'April 2025',   title: 'Curl Flow II',        genArt: { type: 'curl-flow',         seed: 0x23cbfc } },
   { date: 'April 2025',   title: 'Curl Flow III',       genArt: { type: 'curl-flow',         seed: 0x848c9d } },
+  { date: 'April 2025',   title: 'Strange Attractor I',  genArt: { type: 'strange-attractor',  seed: 0x0bb03b } },
+  { date: 'April 2025',   title: 'Strange Attractor II', genArt: { type: 'strange-attractor',  seed: 0xaab83b } },
+  { date: 'April 2025',   title: 'Strange Attractor III', genArt: { type: 'strange-attractor', seed: 0xde68e0 } },
+]
+
+/*
+Legacy craft inventory kept here until each piece is reintroduced with a real
+algo, recording, or destination.
   { date: 'January 2023', title: 'Beaded Necklace', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
   { date: 'January 2023', title: 'Leather Jacket', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
   { date: 'January 2023', title: 'Studded Belt', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
@@ -160,7 +168,7 @@ export const craftItems: CraftItem[] = [
   { date: 'March 2022', title: 'Blurred Icons', src: assetUrl('peach.mp4') },
   { date: 'April 2022', title: 'Arc Teaser', src: assetUrl('peach.mp4') },
   { date: 'March 2022', title: 'Website Presentation', src: assetUrl('peach.mp4') },
-]
+*/
 
 export const craftItemsWithIds = craftItems.map((item) => ({
   ...item,

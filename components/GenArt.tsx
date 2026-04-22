@@ -660,8 +660,8 @@ function runStrangeAttractor(
   // ── Histogram grid ─────────────────────────────────────────────────────────
   const MAX_DIM = 700
   const aspect = W / H
-  const gW = aspect >= 1 ? MAX_DIM : Math.round(MAX_DIM * aspect)
-  const gH = aspect >= 1 ? Math.round(MAX_DIM / aspect) : MAX_DIM
+  const gW = Math.max(1, Math.round(aspect >= 1 ? MAX_DIM : MAX_DIM * aspect))
+  const gH = Math.max(1, Math.round(aspect >= 1 ? MAX_DIM / aspect : MAX_DIM))
 
   const hist = new Float32Array(gW * gH)
   let maxCount = 1
@@ -783,8 +783,12 @@ export default function GenArt({ type = 'flow-field', seed: seedProp, paused, st
     if (!canvas || !wrap) return
 
     const start = () => {
-      canvas.width  = wrap.offsetWidth
-      canvas.height = wrap.offsetHeight
+      const nextWidth  = Math.max(1, Math.round(wrap.offsetWidth))
+      const nextHeight = Math.max(1, Math.round(wrap.offsetHeight))
+      if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) return
+
+      canvas.width  = nextWidth
+      canvas.height = nextHeight
       stopRef.current?.()
       stopRef.current = RUNNERS[type](canvas, seed, dark, () => pausedRef.current)
     }
