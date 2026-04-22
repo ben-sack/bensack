@@ -22,12 +22,11 @@ const subscribers = new Set<(v: boolean) => void>()
 
 export function useSoundEnabled(): [boolean, () => void] {
   const [enabled, setEnabled] = useState<boolean>(true)
-  const mounted = useRef(false)
+  const subscriberRef = useRef<((v: boolean) => void) | undefined>(undefined)
 
   // Read real value after hydration
   useEffect(() => {
     setEnabled(readStorage())
-    mounted.current = true
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === KEY) setEnabled(e.newValue ? JSON.parse(e.newValue) : true)
@@ -35,11 +34,13 @@ export function useSoundEnabled(): [boolean, () => void] {
     window.addEventListener('storage', onStorage)
 
     const sub = (v: boolean) => setEnabled(v)
+    subscriberRef.current = sub
     subscribers.add(sub)
 
     return () => {
       window.removeEventListener('storage', onStorage)
       subscribers.delete(sub)
+      subscriberRef.current = undefined
     }
   }, [])
 
@@ -49,7 +50,9 @@ export function useSoundEnabled(): [boolean, () => void] {
       try {
         localStorage.setItem(KEY, JSON.stringify(next))
       } catch {}
-      subscribers.forEach((s) => s !== setEnabled && s(next))
+      subscribers.forEach((s) => {
+        if (s !== subscriberRef.current) s(next)
+      })
       return next
     })
   }, [])

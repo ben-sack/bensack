@@ -1,4 +1,4 @@
-import { assetUrl, slugify } from './utils'
+import { slugify } from './utils'
 
 // ─── Resume ──────────────────────────────────────────────────────────────────
 export const resume = {
@@ -127,48 +127,23 @@ export interface CraftItem {
 export const craftItems: CraftItem[] = [
   { date: 'April 2025',   title: 'Flow Field I',        genArt: { type: 'flow-field',        seed: 0x1f4e8a } },
   { date: 'April 2025',   title: 'Flow Field II',       genArt: { type: 'flow-field',        seed: 0xa3c7d2 } },
+  { date: 'April 2025',   title: 'Strange Attractor IV', genArt: { type: 'strange-attractor', seed: 0x056987 } },
   { date: 'April 2025',   title: 'Flow Field III',      genArt: { type: 'flow-field',        seed: 0x5e2b9f } },
   { date: 'April 2025',   title: 'Charge Field I',      genArt: { type: 'charge-field',      seed: 0x46b54e } },
+  { date: 'April 2025',   title: 'Strange Attractor V',  genArt: { type: 'strange-attractor', seed: 0xcc7b43 } },
   { date: 'April 2025',   title: 'Charge Field II',     genArt: { type: 'charge-field',      seed: 0x01c9e1 } },
   { date: 'April 2025',   title: 'Charge Field III',    genArt: { type: 'charge-field',      seed: 0xb732e9 } },
+  { date: 'April 2025',   title: 'Strange Attractor VI', genArt: { type: 'strange-attractor', seed: 0x008aa7 } },
   { date: 'April 2025',   title: 'Curl Flow I',         genArt: { type: 'curl-flow',         seed: 0x5d6cbc } },
   { date: 'April 2025',   title: 'Curl Flow II',        genArt: { type: 'curl-flow',         seed: 0x23cbfc } },
+  { date: 'April 2025',   title: 'Strange Attractor VII', genArt: { type: 'strange-attractor', seed: 0x298698 } },
   { date: 'April 2025',   title: 'Curl Flow III',       genArt: { type: 'curl-flow',         seed: 0x848c9d } },
   { date: 'April 2025',   title: 'Strange Attractor I',  genArt: { type: 'strange-attractor',  seed: 0x0bb03b } },
   { date: 'April 2025',   title: 'Strange Attractor II', genArt: { type: 'strange-attractor',  seed: 0xaab83b } },
   { date: 'April 2025',   title: 'Strange Attractor III', genArt: { type: 'strange-attractor', seed: 0xde68e0 } },
+  { date: 'April 2025',   title: 'Strange Attractor VIII', genArt: { type: 'strange-attractor', seed: 0x0b9a2d } },
+  { date: 'April 2025',   title: 'Strange Attractor IX', genArt: { type: 'strange-attractor', seed: 0x97e470 } },
 ]
-
-/*
-Legacy craft inventory kept here until each piece is reintroduced with a real
-algo, recording, or destination.
-  { date: 'January 2023', title: 'Beaded Necklace', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
-  { date: 'January 2023', title: 'Leather Jacket', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
-  { date: 'January 2023', title: 'Studded Belt', src: assetUrl('peach.mp4'), component: true, wrap: 420, requiresPointer: true },
-  { date: 'January 2023', title: 'Vanish Input', src: assetUrl('peach.mp4'), component: true },
-  { date: 'January 2023', title: 'Radial Menu', src: assetUrl('peach.mp4'), component: true, wrap: 500, dark: true },
-  { date: 'January 2023', title: 'Precision Slider', src: assetUrl('peach.mp4'), wrap: true, dark: true },
-  { date: 'January 2023', title: 'Wheel Input', src: assetUrl('peach.mp4'), component: true },
-  { date: 'December 2022', title: '⌘K Breadcrumbs', src: assetUrl('peach.mp4') },
-  { date: 'December 2022', title: 'Preview Comments', src: assetUrl('peach.mp4'), href: '' },
-  { date: 'November 2022', title: 'Cryptic List', src: assetUrl('peach.mp4') },
-  { date: 'November 2022', title: 'Vercel Footer', src: assetUrl('peach.mp4'), component: true, dark: true, requiresPointer: true },
-  { date: 'September 2022', title: 'Gooey Shader', src: assetUrl('gooey.mp4') },
-  { date: 'September 2022', title: 'Mirror Shader', src: assetUrl('stripes.mp4') },
-  { date: 'September 2022', title: 'Flume Shader', src: assetUrl('flume.mp4') },
-  { date: 'September 2022', title: 'Tangerine Shader', src: assetUrl('peach.mp4') },
-  { date: 'July 2022', title: 'Signatures', src: assetUrl('peach.mp4') },
-  { date: 'July 2022', title: 'Design Details', src: assetUrl('peach.mp4') },
-  { date: 'July 2022', title: 'Sticky Video', src: assetUrl('peach.mp4') },
-  { date: 'July 2022', title: 'Focus Reading', src: assetUrl('peach.mp4') },
-  { date: 'May 2022', title: 'Visual Writing', src: assetUrl('peach.mp4') },
-  { date: 'May 2022', title: 'Animated Typing', src: assetUrl('peach.mp4') },
-  { date: 'April 2022', title: 'Microinteractions I', src: assetUrl('peach.mp4') },
-  { date: 'April 2022', title: 'Microinteractions II', src: assetUrl('peach.mp4') },
-  { date: 'March 2022', title: 'Blurred Icons', src: assetUrl('peach.mp4') },
-  { date: 'April 2022', title: 'Arc Teaser', src: assetUrl('peach.mp4') },
-  { date: 'March 2022', title: 'Website Presentation', src: assetUrl('peach.mp4') },
-*/
 
 export const craftItemsWithIds = craftItems.map((item) => ({
   ...item,

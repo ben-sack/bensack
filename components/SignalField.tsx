@@ -44,7 +44,7 @@ const CELL_W      = 11
 const CELL_H      = 18
 const FONT        = '12px Menlo, "Courier New", monospace'
 const DARK_ALPHA  = [0, 0.07, 0.09, 0.12, 0.15, 0.22, 0.34, 0.46, 0.58]
-const LIGHT_ALPHA = [0, 0.05, 0.07, 0.09, 0.11, 0.16, 0.25, 0.36, 0.48]
+const LIGHT_ALPHA = [0, 0.07, 0.10, 0.13, 0.16, 0.22, 0.31, 0.42, 0.54]
 
 // ─── ArtCell type ──────────────────────────────────────────────────────────────
 interface ArtCell { col: number; row: number; ch: string }
@@ -569,7 +569,7 @@ function generateNaturePlatforms(cols: number, rows: number, cellW: number, cell
 }
 
 // ─── Nature scene generator ────────────────────────────────────────────────────
-function generateNature(cols: number, rows: number): ArtCell[] {
+function generateNature(cols: number, rows: number, dark: boolean): ArtCell[] {
   const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(' '))
   function set(r: number, c: number, ch: string) {
     if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = ch
@@ -583,20 +583,22 @@ function generateNature(cols: number, rows: number): ArtCell[] {
     return v - Math.floor(v)
   }
 
-  // ── Stars ────────────────────────────────────────────────────────────────────
-  for (let r = 1; r < Math.floor(rows * 0.44); r++) {
-    for (let c = 0; c < cols; c++) {
-      if (c < 8 && r < 7) continue
-      const hv = fh(c, r, 7)   // salt 7 → different layout from city stars
-      if      (hv > 0.988) set(r, c, fh(c, r, 8) > 0.3 ? '*' : '·')
-      else if (hv > 0.974) set(r, c, '.')
+  // ── Night sky accents ───────────────────────────────────────────────────────
+  if (dark) {
+    for (let r = 1; r < Math.floor(rows * 0.44); r++) {
+      for (let c = 0; c < cols; c++) {
+        if (c < 8 && r < 7) continue
+        const hv = fh(c, r, 7)   // salt 7 → different layout from city stars
+        if      (hv > 0.988) set(r, c, fh(c, r, 8) > 0.3 ? '*' : '·')
+        else if (hv > 0.974) set(r, c, '.')
+      }
     }
-  }
 
-  // ── Crescent moon (upper-left; city puts it upper-right) ─────────────────────
-  set(2, 4, '('); set(2, 5, ')')
-  set(3, 3, '('); set(3, 5, ')'); set(3, 6, '.')
-  set(4, 4, '('); set(4, 5, ')')
+    // ── Crescent moon (upper-left; city puts it upper-right) ───────────────────
+    set(2, 4, '('); set(2, 5, ')')
+    set(3, 3, '('); set(3, 5, ')'); set(3, 6, '.')
+    set(4, 4, '('); set(4, 5, ')')
+  }
 
   // ── Mountain helper ──────────────────────────────────────────────────────────
   // Draws a filled triangular peak: '^' tip, '/' '\' slopes, ':' snow, '.' rock
@@ -732,9 +734,23 @@ interface ConstellationStar {
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
-interface Props { mode: FieldMode; effect?: BotEffect[]; scene?: BotScene }
+interface Props {
+  mode: FieldMode
+  effect?: BotEffect[]
+  scene?: BotScene
+  animate?: boolean
+  maxFps?: number
+  fullControls?: boolean
+}
 
-export default function SignalField({ mode, effect, scene }: Props) {
+export default function SignalField({
+  mode,
+  effect,
+  scene,
+  animate = true,
+  maxFps,
+  fullControls = true,
+}: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const mouseRef   = useRef({ x: -9999, y: -9999 })
   const isDarkRef  = useRef(false)
@@ -857,7 +873,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
     }
 
     function initNatureBgAnim() {
-      if (!cachedNature) cachedNature = generateNature(cols, rows)
+      if (!cachedNature) cachedNature = generateNature(cols, rows, isDarkRef.current)
       natureBgStars = makeBgAnim(cachedNature)
     }
 
@@ -1280,14 +1296,18 @@ export default function SignalField({ mode, effect, scene }: Props) {
       dragHistory.length = 0
     }
 
-    window.addEventListener('resize',     resize,       { passive: true })
-    window.addEventListener('mousemove',  onMouseMove,  { passive: true })
-    window.addEventListener('mouseleave', onMouseLeave, { passive: true })
-    window.addEventListener('mousedown',  onMouseDown)
-    window.addEventListener('mouseup',    onMouseUp)
-    window.addEventListener('touchstart', onTouchStart, { passive: false })
-    window.addEventListener('touchmove',  onTouchMove,  { passive: false })
-    window.addEventListener('touchend',   onTouchEnd)
+    window.addEventListener('resize', resize, { passive: true })
+    if (animate) {
+      window.addEventListener('mousemove',  onMouseMove,  { passive: true })
+      window.addEventListener('mouseleave', onMouseLeave, { passive: true })
+      if (fullControls) {
+        window.addEventListener('mousedown',  onMouseDown)
+        window.addEventListener('mouseup',    onMouseUp)
+        window.addEventListener('touchstart', onTouchStart, { passive: false })
+        window.addEventListener('touchmove',  onTouchMove,  { passive: false })
+        window.addEventListener('touchend',   onTouchEnd)
+      }
+    }
 
     // Pre-allocated buckets for field modes
     const buckets: Array<Array<{ x: number; y: number }>> =
@@ -1807,14 +1827,14 @@ export default function SignalField({ mode, effect, scene }: Props) {
           }
         }
       } else {
-        c2d.fillStyle = 'rgba(30,30,30,0.16)'
+        c2d.fillStyle = 'rgba(30,30,30,0.20)'
         for (const cell of skyLightSun) c2d.fillText(cell.ch, cell.x, cell.y)
 
-        c2d.fillStyle = 'rgba(30,30,30,0.18)'
+        c2d.fillStyle = 'rgba(30,30,30,0.24)'
         for (const bird of skyLightBirds) c2d.fillText(bird.ch, bird.x, bird.y)
 
         if (cloudsOn) {
-          c2d.fillStyle = 'rgba(30,30,30,0.11)'
+          c2d.fillStyle = 'rgba(30,30,30,0.16)'
           for (const cloud of skyLightClouds) {
             cloud.ox += cloud.vx * dt
             const span = W + Math.max(...cloud.cells.map((cell) => cell.x - cloud.baseX)) + CELL_W * 3
@@ -1862,15 +1882,15 @@ export default function SignalField({ mode, effect, scene }: Props) {
           }
 
           if (farBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.05)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.08)'
             for (const s of farBkt)  c2d.fillText(s.ch, s.x, s.y)
           }
           if (midBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.09)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.13)'
             for (const s of midBkt)  c2d.fillText(s.ch, s.x, s.y)
           }
           if (nearBkt.length > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
             for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
           }
 
@@ -1878,7 +1898,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
           if (settled > cityBgStars.length * 0.95) cityBgStars = null
         } else {
           // Static phase after animation completes
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
           for (const cell of cachedCity) {
             if (cell.row >= streetRow) continue
             c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
@@ -1886,7 +1906,7 @@ export default function SignalField({ mode, effect, scene }: Props) {
         }
       } else {
         // ── Nature backdrop — spring animation then static ──────────────────
-        if (!cachedNature) cachedNature = generateNature(cols, rows)
+        if (!cachedNature) cachedNature = generateNature(cols, rows, dark)
 
         if (natureBgStars) {
           type SR = { x: number; y: number; ch: string }
@@ -1919,21 +1939,21 @@ export default function SignalField({ mode, effect, scene }: Props) {
           }
 
           if (farBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.05)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.08)'
             for (const s of farBkt)  c2d.fillText(s.ch, s.x, s.y)
           }
           if (midBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.09)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.13)'
             for (const s of midBkt)  c2d.fillText(s.ch, s.x, s.y)
           }
           if (nearBkt.length > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
             for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
           }
 
           if (settled > natureBgStars.length * 0.95) natureBgStars = null
         } else {
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.15)'
+          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
           for (const cell of cachedNature) {
             c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
           }
@@ -2279,6 +2299,14 @@ export default function SignalField({ mode, effect, scene }: Props) {
 
     // ── Main loop ───────────────────────────────────────────────────────────────
     function draw(now: number) {
+      if (animate && maxFps) {
+        const minFrameMs = 1000 / maxFps
+        if (now - lastFrameTime < minFrameMs) {
+          animId = requestAnimationFrame(draw)
+          return
+        }
+      }
+
       const dt = Math.min((now - lastFrameTime) / 1000, 0.05)
       lastFrameTime = now
       const t = (now - start) / 1000
@@ -2337,24 +2365,29 @@ export default function SignalField({ mode, effect, scene }: Props) {
       else if (m === 'city')                      drawCity(now, dt)
       else if (m === 'bots')                      drawBots(dt, now)
 
-      animId = requestAnimationFrame(draw)
+      if (animate) animId = requestAnimationFrame(draw)
     }
 
-    animId = requestAnimationFrame(draw)
+    if (animate) animId = requestAnimationFrame(draw)
+    else draw(performance.now())
 
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize',     resize)
-      window.removeEventListener('mousemove',  onMouseMove)
-      window.removeEventListener('mouseleave', onMouseLeave)
-      window.removeEventListener('mousedown',  onMouseDown)
-      window.removeEventListener('mouseup',    onMouseUp)
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchmove',  onTouchMove)
-      window.removeEventListener('touchend',   onTouchEnd)
+      if (animate) {
+        window.removeEventListener('mousemove',  onMouseMove)
+        window.removeEventListener('mouseleave', onMouseLeave)
+        if (fullControls) {
+          window.removeEventListener('mousedown',  onMouseDown)
+          window.removeEventListener('mouseup',    onMouseUp)
+          window.removeEventListener('touchstart', onTouchStart)
+          window.removeEventListener('touchmove',  onTouchMove)
+          window.removeEventListener('touchend',   onTouchEnd)
+        }
+      }
       document.body.style.cursor = ''
     }
-  }, [mounted])
+  }, [mounted, resolvedTheme, animate, maxFps, fullControls])
 
   if (!mounted) return null
 

@@ -2,6 +2,7 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 
 const BASE_URL = 'https://bensack.io'
+const DEFAULT_OG_IMAGE = `${BASE_URL}/og.svg`
 
 interface SEOProps {
   title?: string
@@ -15,8 +16,9 @@ export default function SEO({
   ogImage,
 }: SEOProps) {
   const router = useRouter()
-  const canonicalUrl = `${BASE_URL}${router.route}`
-  const ogImageUrl = ogImage ? `${BASE_URL}${ogImage}` : `${BASE_URL}/og.png`
+  const path = router.asPath.split('#')[0]
+  const canonicalUrl = `${BASE_URL}${path === '/' ? '' : path}`
+  const ogImageUrl = ogImage ? `${BASE_URL}${ogImage}` : DEFAULT_OG_IMAGE
   const fullTitle = title ? `${title} — Ben Sack` : 'Ben Sack'
 
   return (

@@ -17,7 +17,6 @@ interface Props {
 
 export default function CraftDetail({ title, canonicalSeed, type }: Props) {
   const router   = useRouter()
-  const canvasEl = useRef<HTMLCanvasElement | null>(null)
 
   const [seed,    setSeed]    = useState(canonicalSeed)
   const [hud,     setHud]     = useState(true)
@@ -28,8 +27,10 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
   useEffect(() => {
     if (!router.isReady) return
     const s = router.query.seed
-    if (typeof s === 'string') setSeed(parseInt(s, 16))
-  }, [router.isReady])
+    if (typeof s !== 'string') return
+    const parsed = parseInt(s, 16)
+    if (Number.isFinite(parsed) && parsed >= 0) setSeed(parsed >>> 0)
+  }, [router.isReady, router.query.seed])
 
   // Keep URL in sync with seed (shallow — no page reload)
   useEffect(() => {

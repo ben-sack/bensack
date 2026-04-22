@@ -47,10 +47,10 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preload" href="/X-Medium.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </Head>
 
-      <ThemeProvider disableTransitionOnChange attribute="class" value={{ dark: darkTheme.className }}>
+        <ThemeProvider disableTransitionOnChange attribute="class" value={{ dark: darkTheme.className }}>
         {route !== '/' && route !== '/genart' && route !== '/craft/[slug]' && (
           <div style={{ opacity: 0.13, pointerEvents: 'none' }}>
-            <SignalField mode="density" />
+            <SignalField mode="density" maxFps={24} fullControls={false} />
           </div>
         )}
         <Dock />

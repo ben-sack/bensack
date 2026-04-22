@@ -150,7 +150,7 @@ export default function Home() {
 
   useEffect(() => {
     if (effectTouched) return
-    setEffects(resolvedTheme === 'dark' ? ['clouds'] : [])
+    setEffects(['clouds'])
   }, [resolvedTheme, effectTouched])
 
   return (

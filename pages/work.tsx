@@ -276,11 +276,14 @@ function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivE
     const container = wrapRef.current
     if (!container) return
     const w          = container.offsetWidth
-    const WALK_SPEED = 105  // px/s
-    const BH         = 5 * 13
-    const sleep      = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-    let cancelled    = false
-    let walkIdx      = 0
+    const WALK_SPEED             = 105  // px/s
+    const BH                     = 5 * 13
+    const PROJECTS_ENTRANCE_MS   = 900
+    const PROJECTS_FADE_IN_MS    = 350
+    const MUSHROOM_SETTLE_WAIT_MS = 2200
+    const sleep                  = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+    let cancelled                = false
+    let walkIdx                  = 0
     let walkTimer: ReturnType<typeof setInterval>
 
     const startWalk = () => {
@@ -322,8 +325,8 @@ function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivE
     }
 
     async function run() {
-      // Let card entrance animations finish, then an extra pause before walking in
-      await sleep(1600)
+      // Let the projects section fully appear, then give the page a beat to settle.
+      await sleep(PROJECTS_ENTRANCE_MS + PROJECTS_FADE_IN_MS + MUSHROOM_SETTLE_WAIT_MS)
       if (cancelled) return
 
       const cards  = measureCards()
@@ -391,9 +394,9 @@ function MushWalker({ wrapRef, onComplete }: { wrapRef: React.RefObject<HTMLDivE
       stopWalk()
       if (cancelled) return
 
-      // Peek back from right edge — lean in, pull lever, watch buddies fall, retreat
-      // Show more of the mushroom on narrow mobile screens
-      const peekX = isMobile ? w * 0.72 : w * 0.91
+      // Peek back from right edge — lean in, pull lever, watch buddies fall, retreat.
+      // Mobile still needs a little more exposure than desktop, but not as much as before.
+      const peekX = isMobile ? w * 0.8 : w * 0.91
       await sleep(500)
       if (cancelled) return
       setDisplay(MUSH_LOOK_LEFT)

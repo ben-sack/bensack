@@ -66,7 +66,7 @@ function compactLabel(title: string, genArt?: CardProps['genArt']) {
   return title
 }
 
-function scatterItems<T extends { genArt?: { type: GenArtType } }>(items: T[]) {
+function scatterItems<T extends { genArt?: { type: GenArtType; seed?: number } }>(items: T[]) {
   const groups = new Map<GenArtType | 'other', T[]>()
 
   for (const item of items) {
@@ -76,16 +76,42 @@ function scatterItems<T extends { genArt?: { type: GenArtType } }>(items: T[]) {
     groups.set(key, bucket)
   }
 
+  // Deterministic shuffle so the grid feels mixed without changing on every render.
+  const hash = (value: string) => {
+    let h = 2166136261
+    for (let i = 0; i < value.length; i++) {
+      h ^= value.charCodeAt(i)
+      h = Math.imul(h, 16777619)
+    }
+    return h >>> 0
+  }
+
   const orderedGroups = Array.from(groups.entries())
     .sort((a, b) => b[1].length - a[1].length)
-    .map(([, bucket]) => [...bucket])
+    .map(([key, bucket]) =>
+      [...bucket].sort((a, b) => {
+        const aKey = `${key}:${a.genArt?.seed ?? 0}:${'id' in a ? String(a.id) : ''}`
+        const bKey = `${key}:${b.genArt?.seed ?? 0}:${'id' in b ? String(b.id) : ''}`
+        return hash(aKey) - hash(bKey)
+      }),
+    )
 
   const scattered: T[] = []
+  let lastType: GenArtType | 'other' | null = null
 
   while (orderedGroups.some((bucket) => bucket.length > 0)) {
-    for (const bucket of orderedGroups) {
-      const next = bucket.shift()
-      if (next) scattered.push(next)
+    const nextBucket = [...orderedGroups]
+      .filter((bucket) => bucket.length > 0)
+      .sort((a, b) => b.length - a.length)
+      .find((bucket) => (bucket[0]?.genArt?.type ?? 'other') !== lastType)
+      ?? [...orderedGroups]
+        .filter((bucket) => bucket.length > 0)
+        .sort((a, b) => b.length - a.length)[0]
+
+    const next = nextBucket?.shift()
+    if (next) {
+      scattered.push(next)
+      lastType = next.genArt?.type ?? 'other'
     }
   }
 
