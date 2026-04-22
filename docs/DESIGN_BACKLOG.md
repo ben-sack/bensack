@@ -34,12 +34,14 @@ Ideas captured from design brainstorm sessions. Roughly prioritized.
 
 - **Favicon animation** — cycle the favicon between a few ASCII frames (subtle; only when tab is visible)
 - **Reduced-motion fallback** — when `prefers-reduced-motion` is set, replace all canvas animations with a single static art scene rendered once
+- **Correct SEO canonical + OG metadata** — use the resolved pathname instead of `router.route` for dynamic pages like `/craft/[slug]`, and add a real default OG image so sharing previews don’t quietly break
 
 ---
 
 ## Performance
 
 - ~~**Dynamically import `SignalField`**~~ — done; `next/dynamic` with `ssr: false` in `index.tsx` and `_app.tsx`
+- **Reduce global `SignalField` cost on content pages** — `_app.tsx` mounts a live density-field canvas behind most non-home routes; audit whether it can pause, render statically, or become opt-in per page without losing the site’s atmosphere
 - **Pause rAF loop on hidden tab** — add `visibilitychange` listener to SignalField to pause/resume the animation loop; currently burns CPU when user switches tabs
 - **ipinfo.io token** — deferred to prod; move to `NEXT_PUBLIC_IPINFO_TOKEN` env var
 
@@ -48,7 +50,11 @@ Ideas captured from design brainstorm sessions. Roughly prioritized.
 ## Code Structure
 
 - ~~**Extract `shuffleLetters`**~~ — done; moved to `lib/utils.ts`, removed from `index.tsx` and `work.tsx`
+- **Finish `shuffleLetters` cleanup** — `photos.tsx` still has a local copy instead of importing the shared util
 - **Extract link hover CSS** — `work.tsx` repeats `onMouseEnter/onMouseLeave` color swap 8+ times; replace with a Stitches class `'&:hover': { color: '$gray12' }`
+- **Validate craft seed params** — `/craft/[slug]` still trusts arbitrary `?seed=` values; guard invalid hex strings before syncing the URL so shared links stay stable
+- **Move legacy craft inventory out of `lib/data.ts`** — keep active craft items in the runtime data file and archive older experiments elsewhere so the current grid stays easy to maintain
+- **Remove leftover dead refs / branches** — clear small leftovers like unused refs and stale commented runtime code that accumulate during design iteration
 - ~~**Resolve `PerspectiveGrid.tsx`**~~ — done; moved to `perspectivegrid` feature branch, removed from main
 
 ---
@@ -69,3 +75,11 @@ Ideas captured from design brainstorm sessions. Roughly prioritized.
 - **Make scene controls discoverable** — "rain" and "stars" buttons at `11px` / `color: gray8` control the most delightful part of the experience; increase contrast or add a visual hint on arrival
 - **Ground text overlay to ASCII field** — home page bio floats at `top: 9vh` with no visual relationship to the background; a subtle frosted-glass backdrop or spatial anchoring would unify them
 - ~~**ASCII backdrop on non-home pages**~~ — done; density field at 13% opacity rendered globally from `_app.tsx`, excluded on home
+
+---
+
+## DevX
+
+- **Add a real quality gate** — add `lint`, `typecheck`, and optional dead-code checks so cleanup regressions are caught before they accumulate
+- **Tighten TS / lint guardrails without slowing iteration** — evaluate `noUnusedLocals`, `noUnusedParameters`, or lint-based equivalents so unused refs, helpers, and branches surface earlier
+- **Stabilize shared client helpers** — clean up small inefficiencies in hooks like `useSoundEnabled` so shared interactive state stays predictable as more animated surfaces are added
