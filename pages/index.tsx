@@ -26,6 +26,7 @@ function Dot() {
 
 // ─── Time + location ──────────────────────────────────────────────────────────
 function TimeLocation() {
+  const ipInfoToken = process.env.NEXT_PUBLIC_IPINFO_TOKEN
   const headerRef      = useRef<HTMLElement>(null)
   const timeRef        = useRef<HTMLSpanElement>(null)
   const locationRef    = useRef<HTMLSpanElement>(null)
@@ -48,13 +49,14 @@ function TimeLocation() {
   }, [])
 
   useEffect(() => {
-    fetch('https://ipinfo.io/json?token=')
+    if (!ipInfoToken) return
+    fetch(`https://ipinfo.io/json?token=${ipInfoToken}`)
       .then((r) => r.json())
       .then((d: { city?: string; country?: string }) => {
         if (d.city && d.country) setVisitor({ city: d.city, country: d.country })
       })
       .catch(() => {})
-  }, [])
+  }, [ipInfoToken])
 
   useEffect(() => {
     if (!visitor?.country) return
