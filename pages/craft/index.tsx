@@ -128,7 +128,7 @@ function CraftCard({ title, src, genArt, id, href }: CardProps) {
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin: '200px' }
+      { rootMargin: '80px' }
     )
     observer.observe(el)
     return () => observer.disconnect()
@@ -161,6 +161,7 @@ function CraftCard({ title, src, genArt, id, href }: CardProps) {
             type={genArt!.type}
             seed={genArt!.seed}
             paused={!inView}
+            resolutionScale={0.62}
             style={{ width: '100%', height: '100%' }}
           />
         </div>

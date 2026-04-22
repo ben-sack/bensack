@@ -749,11 +749,19 @@ export interface GenArtProps {
   type?:      GenArtType
   seed?:      number
   paused?:    boolean
+  resolutionScale?: number
   style?:     React.CSSProperties
   className?: string
 }
 
-export default function GenArt({ type = 'flow-field', seed: seedProp, paused, style, className }: GenArtProps) {
+export default function GenArt({
+  type = 'flow-field',
+  seed: seedProp,
+  paused,
+  resolutionScale = 1,
+  style,
+  className,
+}: GenArtProps) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const wrapRef    = useRef<HTMLDivElement>(null)
   const stopRef    = useRef<(() => void) | null>(null)
@@ -783,8 +791,9 @@ export default function GenArt({ type = 'flow-field', seed: seedProp, paused, st
     if (!canvas || !wrap) return
 
     const start = () => {
-      const nextWidth  = Math.max(1, Math.round(wrap.offsetWidth))
-      const nextHeight = Math.max(1, Math.round(wrap.offsetHeight))
+      const scale = Math.max(0.25, Math.min(1, resolutionScale))
+      const nextWidth  = Math.max(1, Math.round(wrap.offsetWidth * scale))
+      const nextHeight = Math.max(1, Math.round(wrap.offsetHeight * scale))
       if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) return
 
       canvas.width  = nextWidth
@@ -797,7 +806,7 @@ export default function GenArt({ type = 'flow-field', seed: seedProp, paused, st
     const ro = new ResizeObserver(start)
     ro.observe(wrap)
     return () => { stopRef.current?.(); ro.disconnect() }
-  }, [type, seed, dark])
+  }, [type, seed, dark, resolutionScale])
 
   const reseed = useCallback(() => setSeed(Math.floor(Math.random() * 0xFFFFFF)), [])
 
