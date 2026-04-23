@@ -137,6 +137,8 @@ export default function Home() {
   const [scene,  setScene]  = useState<BotScene>('nature')
   const [mobile, setMobile]  = useState(false)
   const [effectTouched, setEffectTouched] = useState(false)
+  const [buddySpawnRequest, setBuddySpawnRequest] = useState(0)
+  const [buddyRemoveRequest, setBuddyRemoveRequest] = useState(0)
 
   useEffect(() => {
     const check = () => setMobile(window.innerWidth < 640)
@@ -159,7 +161,13 @@ export default function Home() {
     <>
       <SEO description="Engineer. Maker. Venice." />
 
-      <SignalField mode="bots" effect={effects} scene={scene} />
+      <SignalField
+        mode="bots"
+        effect={effects}
+        scene={scene}
+        buddySpawnRequest={buddySpawnRequest}
+        buddyRemoveRequest={buddyRemoveRequest}
+      />
 
       <div style={{
         position:  'fixed',
@@ -254,6 +262,49 @@ export default function Home() {
                   </button>
                 </span>
               ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                buddies
+              </span>
+              <span style={{ width: 10, flexShrink: 0 }} />
+              <button
+                onClick={() => setBuddySpawnRequest((current) => current + 1)}
+                style={{
+                  fontSize:       11,
+                  fontFamily:     'var(--fonts-body)',
+                  textTransform:  'lowercase',
+                  letterSpacing:  '0.02em',
+                  color:          'var(--colors-gray12)',
+                  background:     'transparent',
+                  border:         0,
+                  cursor:         'pointer',
+                  padding:        mobile ? '8px 6px' : 0,
+                  margin:         mobile ? '-8px -6px' : 0,
+                  transition:     'color 150ms ease',
+                }}
+              >
+                +
+              </button>
+              <span style={{ color: 'var(--colors-gray6)', fontSize: 11, marginLeft: -3, marginRight: -3 }}>·</span>
+              <button
+                onClick={() => setBuddyRemoveRequest((current) => current + 1)}
+                style={{
+                  fontSize:       11,
+                  fontFamily:     'var(--fonts-body)',
+                  textTransform:  'lowercase',
+                  letterSpacing:  '0.02em',
+                  color:          'var(--colors-gray12)',
+                  background:     'transparent',
+                  border:         0,
+                  cursor:         'pointer',
+                  padding:        mobile ? '8px 6px' : 0,
+                  margin:         mobile ? '-8px -6px' : 0,
+                  transition:     'color 150ms ease',
+                }}
+              >
+                -
+              </button>
             </div>
           </div>
       </div>

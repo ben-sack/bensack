@@ -199,10 +199,15 @@ interface BuddyState {
   species:      string
   x:            number    // top-left pixel x
   y:            number    // top-left pixel y
+  tx:           number    // intro target x
+  ty:           number    // intro target y
   vx:           number    // px/s
   vy:           number    // px/s
   facing:       1 | -1   // 1=right  -1=left (mirrors art)
   onGround:     boolean
+  intro:        boolean
+  outro:        boolean
+  introCells:   ConstellationStar[]
   state:         'walk' | 'airborne' | 'pause' | 'greet' | 'sleep'
   timer:         number    // seconds until next state action
   jumpCooldown:  number    // seconds until next jump allowed
@@ -741,6 +746,9 @@ interface Props {
   animate?: boolean
   maxFps?: number
   fullControls?: boolean
+  buddySpawnRequest?: number
+  buddyRemoveRequest?: number
+  onBuddyCountChange?: (count: number) => void
 }
 
 export default function SignalField({
@@ -750,6 +758,9 @@ export default function SignalField({
   animate = true,
   maxFps,
   fullControls = true,
+  buddySpawnRequest = 0,
+  buddyRemoveRequest = 0,
+  onBuddyCountChange,
 }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const mouseRef   = useRef({ x: -9999, y: -9999 })
@@ -757,6 +768,9 @@ export default function SignalField({
   const modeRef    = useRef<FieldMode>(mode)
   const effectRef  = useRef<BotEffect[]>([])
   const sceneRef   = useRef<BotScene>('nature')
+  const spawnRequestRef = useRef(buddySpawnRequest)
+  const removeRequestRef = useRef(buddyRemoveRequest)
+  const onBuddyCountChangeRef = useRef(onBuddyCountChange)
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
@@ -765,6 +779,9 @@ export default function SignalField({
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { effectRef.current = effect ?? [] }, [effect])
   useEffect(() => { sceneRef.current = scene ?? 'nature' }, [scene])
+  useEffect(() => { spawnRequestRef.current = buddySpawnRequest }, [buddySpawnRequest])
+  useEffect(() => { removeRequestRef.current = buddyRemoveRequest }, [buddyRemoveRequest])
+  useEffect(() => { onBuddyCountChangeRef.current = onBuddyCountChange }, [onBuddyCountChange])
 
   useEffect(() => {
     if (!mounted) return
@@ -784,9 +801,15 @@ export default function SignalField({
     let FONT = '12px Menlo, "Courier New", monospace'
     let prevMode:  FieldMode = modeRef.current
     let prevScene: BotScene  = sceneRef.current
+    let processedSpawnRequest = spawnRequestRef.current
+    let processedRemoveRequest = removeRequestRef.current
 
     function hasEffect(id: BotEffect) {
       return effectRef.current.includes(id)
+    }
+
+    function emitBuddyCount() {
+      onBuddyCountChangeRef.current?.(buddies.length)
     }
 
     // ── Mode state ─────────────────────────────────────────────────────────────
@@ -971,6 +994,188 @@ export default function SignalField({
       }
     }
 
+    function buddyCap() {
+      return Math.min(W < 640 ? 4 : 10, Object.keys(BUDDY_BODIES).length)
+    }
+
+    function shuffledSpecies() {
+      return [...Object.keys(BUDDY_BODIES)].sort(() => Math.random() - 0.5)
+    }
+
+    function chooseSpawnPlatforms(preferElevated = true) {
+      if (preferElevated && platforms.length > 1) return platforms.slice(1)
+      return platforms
+    }
+
+    function pickBuddySpecies() {
+      const recent = new Set(buddies.slice(-3).map((b) => b.species))
+      const pool = shuffledSpecies()
+      return pool.find((species) => !recent.has(species)) ?? pool[0]
+    }
+
+    function findSpawnX(plat: Platform) {
+      const minX = plat.x
+      const maxX = plat.x + Math.max(0, plat.w - BW)
+      if (maxX <= minX) return minX
+
+      let bestX = minX + Math.random() * (maxX - minX)
+      let bestScore = -Infinity
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const x = minX + Math.random() * (maxX - minX)
+        let nearest = Infinity
+        for (const buddy of buddies) {
+          if (Math.abs((buddy.y + BH) - plat.y) > CELL_H * 1.5) continue
+          nearest = Math.min(nearest, Math.abs((buddy.x + BW * 0.5) - (x + BW * 0.5)))
+        }
+        if (nearest > bestScore) {
+          bestScore = nearest
+          bestX = x
+        }
+      }
+      return bestX
+    }
+
+    function buildBuddyIntroCells(
+      species: string,
+      x: number,
+      y: number,
+      facing: 1 | -1,
+      animFrame: number,
+    ): ConstellationStar[] {
+      const frames = BUDDY_BODIES[species]
+      const frame = frames[animFrame % frames.length]
+      const cells: ConstellationStar[] = []
+      for (let li = 0; li < frame.length; li++) {
+        let line = frame[li]
+        if (facing === -1) line = mirrorLine(line)
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci]
+          if (ch === ' ') continue
+          cells.push({
+            x: Math.random() * W,
+            y: Math.random() * Math.max(80, H * 0.34),
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2,
+            tx: x + ci * CELL_W,
+            ty: y + li * CELL_H,
+            ch,
+            free: false,
+            rate: 0.012 + Math.random() * 0.008,
+          })
+        }
+      }
+      return cells
+    }
+
+    function buildBuddyOutroCells(
+      species: string,
+      x: number,
+      y: number,
+      facing: 1 | -1,
+      animFrame: number,
+    ): ConstellationStar[] {
+      const frames = BUDDY_BODIES[species]
+      const frame = frames[animFrame % frames.length]
+      const cells: ConstellationStar[] = []
+      for (let li = 0; li < frame.length; li++) {
+        let line = frame[li]
+        if (facing === -1) line = mirrorLine(line)
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci]
+          if (ch === ' ') continue
+          const sx = x + ci * CELL_W
+          const sy = y + li * CELL_H
+          cells.push({
+            x: sx,
+            y: sy,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: -Math.random() * 1.5,
+            tx: sx + (Math.random() - 0.5) * Math.max(90, W * 0.16),
+            ty: sy + (Math.random() - 0.5) * Math.max(60, H * 0.12) - Math.random() * 28,
+            ch,
+            free: false,
+            rate: 0.01 + Math.random() * 0.006,
+          })
+        }
+      }
+      return cells
+    }
+
+    function createBuddy(
+      species: string,
+      plat: Platform,
+      arrival: 'portal' | 'perch',
+      animateIn = false,
+    ): BuddyState {
+      const xPos = findSpawnX(plat)
+      const perchY = plat.y - BH
+      const portalSource = arrival === 'portal' ? portal : null
+      const intro = animateIn
+      const startX = intro ? xPos : xPos
+      const startY = intro ? perchY : perchY
+      const animFrame = Math.floor(Math.random() * 3)
+      const facing = (portalSource ? -1 : (Math.random() < 0.5 ? 1 : -1)) as 1 | -1
+      return {
+        species,
+        x: startX,
+        y: startY,
+        tx: portalSource ? portalSource.x - BW : xPos,
+        ty: portalSource ? Math.max(0, plat.y - H * 0.42) : perchY,
+        vx: 0,
+        vy: 0,
+        facing,
+        onGround: !portalSource,
+        intro,
+        outro: false,
+        introCells: intro ? buildBuddyIntroCells(species, portalSource ? portalSource.x - BW : xPos, portalSource ? Math.max(0, plat.y - H * 0.42) : perchY, facing, animFrame) : [],
+        state: portalSource ? 'airborne' : 'walk',
+        timer: Math.random() * 3,
+        jumpCooldown: 1.2 + Math.random() * 1.6,
+        greetCooldown: 6 + Math.random() * 4,
+        animFrame,
+        animTimer: Math.random() * 0.5,
+        greetIdx: -1,
+        sleepPhase: 0,
+        bubble: null,
+      }
+    }
+
+    function spawnBuddy() {
+      if (modeRef.current !== 'bots') return
+      if (buddies.length >= buddyCap()) return
+      const spawnPlats = chooseSpawnPlatforms(sceneRef.current !== 'city')
+      if (spawnPlats.length === 0) return
+      const plat = spawnPlats[Math.floor(Math.random() * spawnPlats.length)]
+      const arrival: 'portal' | 'perch' = sceneRef.current === 'city' && portal ? 'portal' : 'perch'
+      buddies.push(createBuddy(pickBuddySpecies(), plat, arrival, true))
+      portalCooldown.push(arrival === 'portal' ? 8 : 0)
+      emitBuddyCount()
+    }
+
+    function removeBuddy() {
+      if (modeRef.current !== 'bots') return
+      if (buddies.length <= 1) return
+      let removeIdx = buddies.length - 1
+      for (let i = buddies.length - 1; i >= 0; i--) {
+        if (!buddies[i].intro && !buddies[i].outro && i !== dragIdx) {
+          removeIdx = i
+          break
+        }
+      }
+      const buddy = buddies[removeIdx]
+      buddy.outro = true
+      buddy.intro = false
+      buddy.introCells = buildBuddyOutroCells(buddy.species, buddy.x, buddy.y, buddy.facing, buddy.animFrame)
+      buddy.bubble = null
+      buddy.state = 'pause'
+      buddy.vx = 0
+      buddy.vy = 0
+      if (dragIdx === removeIdx) {
+        dragIdx = -1
+        dragHistory.length = 0
+      }
+    }
+
     function initBots() {
       if (sceneRef.current === 'city') {
         setupPlatforms()
@@ -990,33 +1195,12 @@ export default function SignalField({
       particles = []
       const SPECIES  = Object.keys(BUDDY_BODIES)
       const COUNT    = Math.min(W < 640 ? 2 : 6, SPECIES.length)
-      const shuffled = [...SPECIES].sort(() => Math.random() - 0.5)
+      const shuffled = shuffledSpecies()
       // Prefer elevated platforms for spawn; fall back to ground if none exist (mobile)
-      const spawnPlats = platforms.length > 1 ? platforms.slice(1) : platforms
-      buddies = Array.from({ length: COUNT }, (_, i) => {
-        const plat = spawnPlats[i % spawnPlats.length]
-        const xPos = plat.x + Math.random() * Math.max(0, plat.w - BW)
-        const yPos = plat.y - BH
-        return {
-          species:      shuffled[i % shuffled.length],
-          x:            xPos,
-          y:            yPos,
-          vx:           0,
-          vy:           0,
-          facing:       (Math.random() < 0.5 ? 1 : -1) as 1 | -1,
-          onGround:     true,
-          state:        'walk' as const,
-          timer:        Math.random() * 3,
-          jumpCooldown:  Math.random() * 2,
-          greetCooldown: 0,
-          animFrame:     Math.floor(Math.random() * 3),
-          animTimer:     Math.random() * 0.5,
-          greetIdx:      -1,
-          sleepPhase:    0,
-          bubble:        null,
-        }
-      })
+      const spawnPlats = chooseSpawnPlatforms(true)
+      buddies = Array.from({ length: COUNT }, (_, i) => createBuddy(shuffled[i % shuffled.length], spawnPlats[i % spawnPlats.length], 'perch'))
       portalCooldown = new Array(buddies.length).fill(0)
+      emitBuddyCount()
     }
 
     // ── Stars overlay init ─────────────────────────────────────────────────────
@@ -1248,8 +1432,8 @@ export default function SignalField({
       const t = e.touches[0]
       const mx = t.clientX, my = t.clientY
       mouseRef.current = { x: mx, y: my }
-      // Expand hit area for fingers on mobile
       const slop = W < 640 ? 24 : 0
+      // Expand hit area for fingers on mobile
       for (let i = 0; i < buddies.length; i++) {
         const b = buddies[i]
         if (mx >= b.x - slop && mx <= b.x + BW + slop &&
@@ -1585,6 +1769,60 @@ export default function SignalField({
           b.onGround = false
           b.state = 'airborne'
           b.sleepPhase = 0
+          continue
+        }
+
+        if (b.intro) {
+          let settled = 0
+          for (const cell of b.introCells) {
+            cell.vx += (cell.tx - cell.x) * cell.rate
+            cell.vy += (cell.ty - cell.y) * cell.rate
+            cell.vx *= 0.92
+            cell.vy *= 0.92
+            cell.x += cell.vx
+            cell.y += cell.vy
+            const dx = cell.x - cell.tx
+            const dy = cell.y - cell.ty
+            if (Math.sqrt(dx * dx + dy * dy) < 3) settled++
+          }
+          if (settled > b.introCells.length * 0.985) {
+            b.x = b.tx
+            b.y = b.ty
+            b.intro = false
+            b.introCells = []
+            b.vx = 0
+            b.vy = 0
+            b.onGround = true
+            b.state = 'walk'
+          }
+          continue
+        }
+
+        if (b.outro) {
+          let escaped = 0
+          for (const cell of b.introCells) {
+            cell.vx += (cell.tx - cell.x) * cell.rate
+            cell.vy += (cell.ty - cell.y) * cell.rate
+            cell.vx *= 0.92
+            cell.vy *= 0.92
+            cell.x += cell.vx
+            cell.y += cell.vy
+            const dx = cell.x - cell.tx
+            const dy = cell.y - cell.ty
+            if (Math.sqrt(dx * dx + dy * dy) < 8) escaped++
+          }
+          if (escaped > b.introCells.length * 0.96) {
+            buddies.splice(i, 1)
+            portalCooldown.splice(i, 1)
+            if (dragIdx === i) {
+              dragIdx = -1
+              dragHistory.length = 0
+            } else if (dragIdx > i) {
+              dragIdx -= 1
+            }
+            emitBuddyCount()
+            i--
+          }
           continue
         }
 
@@ -2056,8 +2294,38 @@ export default function SignalField({
       }
 
       // ── Buddies ─────────────────────────────────────────────────────────────
-      c2d.fillStyle = dark ? 'rgba(255,255,255,0.58)' : 'rgba(30,30,30,0.52)'
       for (const b of buddies) {
+        if (b.intro || b.outro) {
+          type SR = { x: number; y: number; ch: string }
+          const farBkt: SR[] = []
+          const midBkt: SR[] = []
+          const nearBkt: SR[] = []
+          for (const cell of b.introCells) {
+            const dx = cell.x - cell.tx
+            const dy = cell.y - cell.ty
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const px = Math.round(cell.x / CELL_W) * CELL_W
+            const py = Math.round(cell.y / CELL_H) * CELL_H
+            if (dist < 26) nearBkt.push({ x: px, y: py, ch: cell.ch === '·' ? eye : cell.ch })
+            else if (dist < 82) midBkt.push({ x: px, y: py, ch: b.outro ? '·' : '+' })
+            else farBkt.push({ x: px, y: py, ch: '.' })
+          }
+          if (farBkt.length > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.08)' : 'rgba(30,30,30,0.08)'
+            for (const s of farBkt) c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (midBkt.length > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(30,30,30,0.14)'
+            for (const s of midBkt) c2d.fillText(s.ch, s.x, s.y)
+          }
+          if (nearBkt.length > 0) {
+            c2d.fillStyle = dark ? 'rgba(255,255,255,0.44)' : 'rgba(30,30,30,0.34)'
+            for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
+          }
+          continue
+        }
+
+        c2d.fillStyle = dark ? 'rgba(255,255,255,0.58)' : 'rgba(30,30,30,0.52)'
         const frames = BUDDY_BODIES[b.species]
         const frame  = frames[b.animFrame % frames.length]
         for (let li = 0; li < frame.length; li++) {
@@ -2069,6 +2337,7 @@ export default function SignalField({
 
       // ── Sleep z's ───────────────────────────────────────────────────────────
       for (const b of buddies) {
+        if (b.intro || b.outro) continue
         if (b.state !== 'sleep') continue
         // Three staggered z streams drifting upward — each offset 1/3 of a cycle
         for (let zi = 0; zi < 3; zi++) {
@@ -2084,6 +2353,7 @@ export default function SignalField({
       // ── Names on hover ──────────────────────────────────────────────────────
       c2d.textAlign = 'center'
       for (const b of buddies) {
+        if (b.intro || b.outro) continue
         const ndx  = (b.x + BW / 2) - mx
         const ndy  = (b.y + BH / 2) - my
         const dist = Math.sqrt(ndx * ndx + ndy * ndy)
@@ -2097,6 +2367,7 @@ export default function SignalField({
       // ── Speech bubbles ──────────────────────────────────────────────────────
       c2d.textAlign = 'center'
       for (const b of buddies) {
+        if (b.intro || b.outro) continue
         if (!b.bubble) continue
         const { text, life } = b.bubble
         // Fade in over first 0.25 s, fade out over last 0.5 s
@@ -2299,6 +2570,15 @@ export default function SignalField({
 
     // ── Main loop ───────────────────────────────────────────────────────────────
     function draw(now: number) {
+      while (processedSpawnRequest < spawnRequestRef.current) {
+        spawnBuddy()
+        processedSpawnRequest++
+      }
+      while (processedRemoveRequest < removeRequestRef.current) {
+        removeBuddy()
+        processedRemoveRequest++
+      }
+
       if (animate && maxFps) {
         const minFrameMs = 1000 / maxFps
         if (now - lastFrameTime < minFrameMs) {
