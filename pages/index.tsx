@@ -299,7 +299,7 @@ export default function Home() {
                   border:         0,
                   cursor:         'pointer',
                   padding:        mobile ? '8px 6px' : 0,
-                  margin:         mobile ? '-8px -6px' : 0,
+                  margin:         mobile ? '-8px -6px' : '0 0 0 -8px',
                   transition:     'color 150ms ease',
                 }}
               >

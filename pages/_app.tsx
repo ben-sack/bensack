@@ -37,7 +37,9 @@ export default function App({ Component, pageProps }: AppProps) {
     <>
       <Head>
         <title>Ben Sack</title>
-        <link rel="shortcut icon" href="/favicon.svg" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+        <link rel="icon" type="image/png" href="/favicon.png?v=2" />
+        <link rel="shortcut icon" href="/favicon.png?v=2" />
         <meta name="author" content="Benjamin Sack" />
         <meta name="twitter:site" content="@bensack_" />
         <meta name="twitter:creator" content="@bensack_" />

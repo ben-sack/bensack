@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, animate, useMotionValue, useInView, AnimatePresence } from 'framer-motion'
 import type { GetStaticProps } from 'next'
+import { useTheme } from 'next-themes'
 import SEO from '../components/SEO'
 import Box from '../components/Box'
 import Text from '../components/Text'
@@ -898,6 +899,9 @@ interface ProjectCardProps {
 }
 
 function ProjectCard({ title, description, stack, href, ogImage, index = 0, mushPlat }: ProjectCardProps) {
+  const { resolvedTheme } = useTheme()
+  const isFig = title === 'Fig'
+  const darkMode = resolvedTheme === 'dark'
   const motionProps = {
     initial:    { opacity: 0, y: 12 } as const,
     whileInView: { opacity: 1, y: 0 } as const,
@@ -915,14 +919,36 @@ function ProjectCard({ title, description, stack, href, ogImage, index = 0, mush
           overflow: 'hidden',
           background: 'var(--colors-gray3)',
           lineHeight: 0,
+          position: 'relative',
         }}>
           <img
             src={ogImage}
             alt={title}
             loading="lazy"
-            style={{ width: '100%', height: 96, objectFit: 'cover', display: 'block' }}
+            style={{
+              width: '100%',
+              height: 96,
+              objectFit: 'cover',
+              display: 'block',
+              filter: isFig ? 'saturate(0.82) contrast(0.9) brightness(1.05)' : undefined,
+              opacity: isFig ? 0.94 : 1,
+              transition: 'filter 180ms ease, opacity 180ms ease',
+            }}
             onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
           />
+          {isFig && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: darkMode
+                  ? 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)'
+                  : 'linear-gradient(180deg, rgba(247,244,238,0.18) 0%, rgba(247,244,238,0.06) 100%)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
         </div>
       )}
       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--colors-gray12)', fontFamily: 'var(--fonts-body)', display: 'block' }}>
@@ -1219,7 +1245,9 @@ export default function Resume({ ogImages = {} }: Props) {
 
 // ─── Static props — fetch OG images for Shopify sites at build time ────────
 export const getStaticProps: GetStaticProps<Props> = async () => {
-  const ogImages: Record<string, string | null> = {}
+  const ogImages: Record<string, string | null> = {
+    Fig: 'https://media.licdn.com/dms/image/v2/C561BAQH8IqvHgpfJgg/company-background_10000/company-background_10000/0/1649437656644/disney_streaming_cover?e=1777510800&v=beta&t=mCuxa43kTy3bCy0R2XjlGFYrWqyzWdlPaDCXjImXyIA',
+  }
   const shopifyTitles = new Set(['Bristol Studios', 'Streets Ahead', 'Literally Balling'])
 
   await Promise.all(

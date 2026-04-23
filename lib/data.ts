@@ -76,7 +76,7 @@ export const resume = {
     { label: 'Fig — config-driven ETL framework, Disney Streaming' },
     { label: 'ML feature store for Hulu on Disney+ integration' },
     { label: 'Cloud data platform migration at Progressive Insurance' },
-    { label: 'Bristol Studios — e-commerce consulting', href: 'https://bristol-studios.com' },
+    { label: 'Bristol Studios — e-commerce consulting', href: 'https://bristol-studio.com/' },
     { label: 'Streets Ahead — Shopify build', href: 'https://streetsaheadinc.com' },
   ],
   projects: [
@@ -90,7 +90,7 @@ export const resume = {
       title: 'Bristol Studios',
       description: 'Athlesure brand at the intersection of fashion and basketball',
       stack: ['Shopify', 'Liquid', 'JavaScript', 'Consulting'],
-      href: 'https://bristol-studios.com',
+      href: 'https://bristol-studio.com/',
     },
     {
       title: 'Streets Ahead',
