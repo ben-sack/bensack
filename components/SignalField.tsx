@@ -626,7 +626,7 @@ function generateNature(cols: number, rows: number, dark: boolean): ArtCell[] {
 
   // ── Distant mountains ────────────────────────────────────────────────────────
   const farBase = Math.floor(rows * 0.54)
-  const farN    = 7
+  const farN    = Math.max(7, Math.floor(cols / 10))
   for (let i = 0; i < farN; i++) {
     const cx = Math.floor((i + 0.4 + fh(i, 0, 22) * 0.2) / farN * cols)
     const h  = 3 + Math.floor(fh(i, 0, 23) * Math.floor(rows * 0.10))
@@ -635,7 +635,7 @@ function generateNature(cols: number, rows: number, dark: boolean): ArtCell[] {
 
   // ── Main mountains ───────────────────────────────────────────────────────────
   const mtnBase = Math.floor(rows * 0.67)
-  const mtnN    = 4 + Math.floor(fh(0, 0, 31) * 2)
+  const mtnN    = Math.max(4 + Math.floor(fh(0, 0, 31) * 2), Math.floor(cols / 16))
   for (let i = 0; i < mtnN; i++) {
     const cx   = Math.floor((i + 0.4 + fh(i, 0, 32) * 0.2) / mtnN * cols)
     const minH = Math.floor(rows * 0.12)

@@ -39,10 +39,21 @@ function TimeLocation() {
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    const fmt = () => new Date().toLocaleTimeString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      hour: 'numeric', minute: '2-digit', second: '2-digit',
-    })
+    const fmt = () => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }).formatToParts(new Date())
+
+      const hour = parts.find((part) => part.type === 'hour')?.value ?? ''
+      const minute = parts.find((part) => part.type === 'minute')?.value ?? ''
+      const second = parts.find((part) => part.type === 'second')?.value ?? ''
+      const dayPeriod = parts.find((part) => part.type === 'dayPeriod')?.value.toLowerCase() ?? ''
+      return `${hour}:${minute}:${second} ${dayPeriod}`
+    }
     setTime(fmt())
     const id = setInterval(() => setTime(fmt()), 1000)
     return () => clearInterval(id)
@@ -83,10 +94,11 @@ function TimeLocation() {
   if (!mounted) return <div style={{ height: 24, marginBottom: 16 }} />
 
   const base: React.CSSProperties = {
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: '24px',
     color: 'var(--colors-gray10)',
     fontFamily: 'var(--fonts-body)',
+    fontWeight: 500,
     textTransform: 'lowercase',
     whiteSpace: 'nowrap',
   }
@@ -105,7 +117,17 @@ function TimeLocation() {
         transition: 'opacity 300ms ease',
       }}
     >
-      <span ref={timeRef}     style={{ ...base, fontVariantNumeric: 'tabular-nums' }}>{time}</span>
+      <span
+        ref={timeRef}
+        style={{
+          ...base,
+          fontWeight: 500,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '-0.05em',
+        }}
+      >
+        {time}
+      </span>
       <Dot />
       <span ref={locationRef} style={base}>venice, california</span>
       {visitor && countryName && (
@@ -139,6 +161,7 @@ export default function Home() {
   const [effectTouched, setEffectTouched] = useState(false)
   const [buddySpawnRequest, setBuddySpawnRequest] = useState(0)
   const [buddyRemoveRequest, setBuddyRemoveRequest] = useState(0)
+  const [playground, setPlayground] = useState(false)
 
   useEffect(() => {
     const check = () => setMobile(window.innerWidth < 640)
@@ -161,13 +184,18 @@ export default function Home() {
     <>
       <SEO description="Engineer. Maker. Venice." />
 
-      <SignalField
-        mode="bots"
-        effect={effects}
-        scene={scene}
-        buddySpawnRequest={buddySpawnRequest}
-        buddyRemoveRequest={buddyRemoveRequest}
-      />
+      <div style={{
+        opacity: playground ? 1 : 0.05,
+        transition: 'opacity 700ms ease',
+      }}>
+        <SignalField
+          mode="bots"
+          effect={effects}
+          scene={scene}
+          buddySpawnRequest={buddySpawnRequest}
+          buddyRemoveRequest={buddyRemoveRequest}
+        />
+      </div>
 
       <div style={{
         position:  'fixed',
@@ -200,112 +228,150 @@ export default function Home() {
           <h1 className="vh">Ben Sack — Engineer building reliable systems. Currently at Databricks.</h1>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 20 }}>
+
+            {/* playground toggle — always visible */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
-                fx
+                ↳
               </span>
-              {EFFECTS.map(({ id, label }, i) => (
-                <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
-                  <button
-                    onClick={() => {
-                      setEffectTouched(true)
-                      setEffects((current) =>
-                        current.includes(id)
-                          ? current.filter((effectId) => effectId !== id)
-                          : [...current, id]
-                      )
-                    }}
-                    style={{
-                      fontSize:       11,
-                      fontFamily:     'var(--fonts-body)',
-                      textTransform:  'lowercase',
-                      letterSpacing:  '0.02em',
-                      color:          effects.includes(id) ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
-                      background:     'transparent',
-                      border:         0,
-                      cursor:         'pointer',
-                      padding:        mobile ? '8px 6px' : 0,
-                      margin:         mobile ? '-8px -6px' : 0,
-                      transition:     'color 150ms ease',
-                    }}
-                  >
-                    {label}
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
-                world
-              </span>
-              {SCENES.map(({ id, label }, i) => (
-                <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
-                  <button
-                    onClick={() => setScene(id)}
-                    style={{
-                      fontSize:       11,
-                      fontFamily:     'var(--fonts-body)',
-                      textTransform:  'lowercase',
-                      letterSpacing:  '0.02em',
-                      color:          scene === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
-                      background:     'transparent',
-                      border:         0,
-                      cursor:         'pointer',
-                      padding:        mobile ? '8px 6px' : 0,
-                      margin:         mobile ? '-8px -6px' : 0,
-                      transition:     'color 150ms ease',
-                    }}
-                  >
-                    {label}
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
-                buddies
-              </span>
-              <span style={{ width: 10, flexShrink: 0 }} />
               <button
-                onClick={() => setBuddySpawnRequest((current) => current + 1)}
+                onClick={() => setPlayground((p) => !p)}
                 style={{
-                  fontSize:       11,
-                  fontFamily:     'var(--fonts-body)',
-                  textTransform:  'lowercase',
-                  letterSpacing:  '0.02em',
-                  color:          'var(--colors-gray12)',
-                  background:     'transparent',
-                  border:         0,
-                  cursor:         'pointer',
-                  padding:        mobile ? '8px 6px' : 0,
-                  margin:         mobile ? '-8px -6px' : 0,
-                  transition:     'color 150ms ease',
+                  fontSize:      11,
+                  fontFamily:    'var(--fonts-body)',
+                  textTransform: 'lowercase',
+                  letterSpacing: '0.02em',
+                  color:         playground ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                  background:    'transparent',
+                  border:        0,
+                  cursor:        'pointer',
+                  padding:       mobile ? '8px 6px' : 0,
+                  margin:        mobile ? '-8px -6px' : 0,
+                  transition:    'color 150ms ease',
                 }}
               >
-                +
-              </button>
-              <span style={{ color: 'var(--colors-gray6)', fontSize: 11, marginLeft: -3, marginRight: -3 }}>·</span>
-              <button
-                onClick={() => setBuddyRemoveRequest((current) => current + 1)}
-                style={{
-                  fontSize:       11,
-                  fontFamily:     'var(--fonts-body)',
-                  textTransform:  'lowercase',
-                  letterSpacing:  '0.02em',
-                  color:          'var(--colors-gray12)',
-                  background:     'transparent',
-                  border:         0,
-                  cursor:         'pointer',
-                  padding:        mobile ? '8px 6px' : 0,
-                  margin:         mobile ? '-8px -6px' : '0 0 0 -8px',
-                  transition:     'color 150ms ease',
-                }}
-              >
-                -
+                playground
               </button>
             </div>
+
+            {/* controls — only accessible in playground mode */}
+            <div style={{
+              opacity:       playground ? 1 : 0,
+              transform:     playground ? 'translateY(0)' : 'translateY(-4px)',
+              pointerEvents: playground ? 'auto' : 'none',
+              transition:    'opacity 400ms ease, transform 400ms ease',
+              display:       'flex',
+              flexDirection: 'column',
+              gap:           6,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                  fx
+                </span>
+                {EFFECTS.map(({ id, label }, i) => (
+                  <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
+                    <button
+                      onClick={() => {
+                        setEffectTouched(true)
+                        setEffects((current) =>
+                          current.includes(id)
+                            ? current.filter((effectId) => effectId !== id)
+                            : [...current, id]
+                        )
+                      }}
+                      style={{
+                        fontSize:       11,
+                        fontFamily:     'var(--fonts-body)',
+                        textTransform:  'lowercase',
+                        letterSpacing:  '0.02em',
+                        color:          effects.includes(id) ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                        background:     'transparent',
+                        border:         0,
+                        cursor:         'pointer',
+                        padding:        mobile ? '8px 6px' : 0,
+                        margin:         mobile ? '-8px -6px' : 0,
+                        transition:     'color 150ms ease',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                  world
+                </span>
+                {SCENES.map(({ id, label }, i) => (
+                  <span key={id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {i > 0 && <span style={{ color: 'var(--colors-gray6)', fontSize: 11 }}>·</span>}
+                    <button
+                      onClick={() => setScene(id)}
+                      style={{
+                        fontSize:       11,
+                        fontFamily:     'var(--fonts-body)',
+                        textTransform:  'lowercase',
+                        letterSpacing:  '0.02em',
+                        color:          scene === id ? 'var(--colors-gray12)' : 'var(--colors-gray8)',
+                        background:     'transparent',
+                        border:         0,
+                        cursor:         'pointer',
+                        padding:        mobile ? '8px 6px' : 0,
+                        margin:         mobile ? '-8px -6px' : 0,
+                        transition:     'color 150ms ease',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
+                  buddies
+                </span>
+                <span style={{ width: 10, flexShrink: 0 }} />
+                <button
+                  onClick={() => setBuddySpawnRequest((current) => current + 1)}
+                  style={{
+                    fontSize:       11,
+                    fontFamily:     'var(--fonts-body)',
+                    textTransform:  'lowercase',
+                    letterSpacing:  '0.02em',
+                    color:          'var(--colors-gray12)',
+                    background:     'transparent',
+                    border:         0,
+                    cursor:         'pointer',
+                    padding:        mobile ? '8px 6px' : 0,
+                    margin:         mobile ? '-8px -6px' : 0,
+                    transition:     'color 150ms ease',
+                  }}
+                >
+                  +
+                </button>
+                <span style={{ color: 'var(--colors-gray6)', fontSize: 11, marginLeft: -3, marginRight: -3 }}>·</span>
+                <button
+                  onClick={() => setBuddyRemoveRequest((current) => current + 1)}
+                  style={{
+                    fontSize:       11,
+                    fontFamily:     'var(--fonts-body)',
+                    textTransform:  'lowercase',
+                    letterSpacing:  '0.02em',
+                    color:          'var(--colors-gray12)',
+                    background:     'transparent',
+                    border:         0,
+                    cursor:         'pointer',
+                    padding:        mobile ? '8px 6px' : 0,
+                    margin:         mobile ? '-8px -6px' : '0 0 0 -8px',
+                    transition:     'color 150ms ease',
+                  }}
+                >
+                  -
+                </button>
+              </div>
+            </div>
+
           </div>
       </div>
     </>
