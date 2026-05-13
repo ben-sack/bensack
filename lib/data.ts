@@ -70,7 +70,11 @@ export const resume = {
   ],
   currently: [
     { label: 'Specialist Solutions Architect at Databricks', href: 'https://databricks.com' },
-    { label: 'bensack.io — this site' },
+    { label: 'Nvidia Ops Data Platform build out', href: 'https://nvidia.com' },
+    { label: 'Meta Databricks ETL Framework'},
+    { label: 'Backline - Sponsorship platform for live events', href: 'https://back-line.netlify.app' },
+    { label: 'Streets Ahead - technical consultent', href: 'https://streetsaheadinc.com' },
+    { label: 'sack.sh' },
   ],
   previously: [
     { label: 'Fig — config-driven ETL framework, Disney Streaming' },
