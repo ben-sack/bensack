@@ -26,7 +26,7 @@ export default function Photos() {
           <Text size="32" weight="500" color="gray12" css={{ letterSpacing: '-0.5px', mb: '$1' }}>
             <span ref={labelRef}>Photos</span>
           </Text>
-          <Text size="14" color="gray11">Coming soon.</Text>
+          <Text size="14" color="gray11"></Text>
         </Box>
       </motion.div>
     </>
