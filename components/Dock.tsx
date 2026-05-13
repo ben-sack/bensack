@@ -473,9 +473,11 @@ export default function Dock() {
             <CraftIcon />
           </DockItem>
 
+          {/*
           <DockItem href="/photos" label="Photos">
             <PhotosIcon />
           </DockItem>
+          */}
 
           <Separator />
 
