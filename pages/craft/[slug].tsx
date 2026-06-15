@@ -32,11 +32,14 @@ export default function CraftDetail({ title, canonicalSeed, type }: Props) {
     if (Number.isFinite(parsed) && parsed >= 0) setSeed(parsed >>> 0)
   }, [router.isReady, router.query.seed])
 
-  // Keep URL in sync with seed (shallow — no page reload)
+  // Keep URL in sync with seed (shallow — no page reload). Skip when the URL
+  // already matches so we don't fire a redundant replace on initial load.
   useEffect(() => {
     if (!router.isReady) return
+    const target = seed.toString(16).padStart(6, '0')
+    if (router.query.seed === target) return
     router.replace(
-      { query: { slug: slugify(title), seed: seed.toString(16).padStart(6, '0') } },
+      { query: { slug: slugify(title), seed: target } },
       undefined,
       { shallow: true },
     )

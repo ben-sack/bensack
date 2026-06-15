@@ -1243,34 +1243,18 @@ export default function Resume({ ogImages = {} }: Props) {
   )
 }
 
-// ─── Static props — fetch OG images for Shopify sites at build time ────────
+// ─── Static props — project images served locally from /public/work ────────
+// Previously these were scraped from each site's og:image at build time, which
+// was fragile: remote URLs (esp. the signed LinkedIn one) expire and 404. The
+// images are now downloaded, downscaled, and committed under /public/work so
+// they render reliably and load fast. Re-run the download manually if a brand
+// refreshes its artwork.
 export const getStaticProps: GetStaticProps<Props> = async () => {
   const ogImages: Record<string, string | null> = {
-    Fig: 'https://media.licdn.com/dms/image/v2/C561BAQH8IqvHgpfJgg/company-background_10000/company-background_10000/0/1649437656644/disney_streaming_cover?e=1777510800&v=beta&t=mCuxa43kTy3bCy0R2XjlGFYrWqyzWdlPaDCXjImXyIA',
+    'Fig':               '/work/fig.png',
+    'Bristol Studios':   '/work/bristol-studios.jpg',
+    'Streets Ahead':     '/work/streets-ahead.jpg',
+    'Literally Balling': '/work/literally-balling.jpg',
   }
-  const shopifyTitles = new Set(['Bristol Studios', 'Streets Ahead', 'Literally Balling'])
-
-  await Promise.all(
-    resume.projects
-      .filter(p => shopifyTitles.has(p.title) && p.href)
-      .map(async ({ title, href }) => {
-        try {
-          const res = await fetch(href, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
-            signal: AbortSignal.timeout(8000),
-          })
-          const html = await res.text()
-          const match =
-            html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/) ||
-            html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/)
-          ogImages[title] = match?.[1] ?? null
-        } catch {
-          ogImages[title] = null
-        }
-      })
-  )
-
-  return { props: { ogImages }, revalidate: 86400 }
+  return { props: { ogImages } }
 }

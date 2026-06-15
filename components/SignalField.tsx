@@ -1497,7 +1497,7 @@ export default function SignalField({
     const buckets: Array<Array<{ x: number; y: number }>> =
       Array.from({ length: 9 }, () => [])
 
-    const start = performance.now()
+    let start = performance.now()
     let lastFrameTime = start
 
     // ── Draw: density / waves ───────────────────────────────────────────────────
@@ -2648,11 +2648,31 @@ export default function SignalField({
       if (animate) animId = requestAnimationFrame(draw)
     }
 
+    // Fully pause the loop while the tab is hidden. Browsers already throttle
+    // rAF for hidden tabs, but this guarantees zero work and — by shifting the
+    // clock forward by the hidden duration on resume — avoids the field
+    // visibly jumping when the tab becomes active again.
+    let hiddenAt = 0
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animId)
+        animId = 0
+        hiddenAt = performance.now()
+      } else if (animate && !animId) {
+        const gap = performance.now() - hiddenAt
+        start += gap
+        lastFrameTime = performance.now()
+        animId = requestAnimationFrame(draw)
+      }
+    }
+    if (animate) document.addEventListener('visibilitychange', onVisibility)
+
     if (animate) animId = requestAnimationFrame(draw)
     else draw(performance.now())
 
     return () => {
       cancelAnimationFrame(animId)
+      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('resize',     resize)
       if (animate) {
         window.removeEventListener('mousemove',  onMouseMove)

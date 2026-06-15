@@ -7,9 +7,6 @@ const Text = styled('p', {
     family: {
       body: { fontFamily: '$body' },
     },
-    variant: {
-      heading: { fontFamily: '$body', fontWeight: '600 !important' },
-    },
     size: {
       10: { fontSize: '$10' },
       12: { fontSize: '$12' },
@@ -37,9 +34,6 @@ const Text = styled('p', {
     weight: {
       400: { fontWeight: '400' },
       500: { fontWeight: '500' },
-      600: { fontWeight: '600' },
-      700: { fontWeight: '700' },
-      800: { fontWeight: '800' },
     },
     color: {
       gray11: { color: '$gray11' },

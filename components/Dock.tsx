@@ -102,6 +102,15 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
   const router = useRouter()
   const [, firstSegment] = router.pathname.split('/')
 
+  const isInternal = href?.startsWith('/')
+
+  // Prefetch internal routes so the first navigation is instant instead of
+  // downloading the route chunk + data on click. (No-op in dev / on metered
+  // connections; Next handles those guards internally.)
+  useEffect(() => {
+    if (isInternal && href) router.prefetch(href)
+  }, [isInternal, href, router])
+
   const size = useSpring(40, itemSpring)
   const y = useSpring(0, jumpSpring)
 
@@ -140,7 +149,10 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
   return (
     <motion.div
       style={{ position: 'relative' }}
-      onPointerEnter={(e) => { if (e.pointerType === 'mouse') setHovered(true) }}
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') setHovered(true)
+        if (isInternal && href) router.prefetch(href)
+      }}
       onPointerLeave={() => setHovered(false)}
     >
       <AnimatePresence>

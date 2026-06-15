@@ -40,11 +40,6 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
         <link rel="icon" type="image/png" href="/favicon.png?v=2" />
         <link rel="shortcut icon" href="/favicon.png?v=2" />
-        <meta name="author" content="Benjamin Sack" />
-        <meta name="twitter:site" content="@bensack_" />
-        <meta name="twitter:creator" content="@bensack_" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="robots" content="index,follow" />
         <link rel="preload" href="/X-Regular.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/X-Medium.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </Head>

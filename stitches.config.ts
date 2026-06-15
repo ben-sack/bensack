@@ -201,6 +201,14 @@ export const darkTheme = createTheme('dark', {
 })
 
 export const globalStyles = globalCss({
+  'html': {
+    // Reserve the vertical scrollbar's space at all times so the centered
+    // layout doesn't shift horizontally when the scrollbar appears/disappears
+    // as async content and staggered entrance animations change page height.
+    // No-op with macOS overlay scrollbars; fixes the left/right "shake" on
+    // classic scrollbars (Windows, some Linux/Firefox setups).
+    scrollbarGutter: 'stable',
+  },
   'body': {
     margin: 0,
     background: 'var(--colors-gray1)',
@@ -210,13 +218,13 @@ export const globalStyles = globalCss({
     {
       fontFamily: 'X',
       fontWeight: 400,
-      fontDisplay: 'swap',
+      fontDisplay: 'optional',
       src: 'url(/X-Regular.woff2) format("woff2")',
     } as never,
     {
       fontFamily: 'X',
       fontWeight: 500,
-      fontDisplay: 'swap',
+      fontDisplay: 'optional',
       src: 'url(/X-Medium.woff2) format("woff2")',
     } as never,
   ],
