@@ -4,8 +4,9 @@ import { motion, useSpring, useTransform, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import useSound from 'use-sound'
 import { CSS } from '@stitches/react'
-import { css, keyframes, config } from '../stitches.config'
+import { css, config } from '../stitches.config'
 import { useSoundEnabled } from '../lib/useSound'
+import { useChromeHidden } from '../lib/uiChrome'
 import Box from './Box'
 
 // ─── Mouse position context ────────────────────────────────────────────────
@@ -29,12 +30,6 @@ function interpolate(input: number[], output: number[], value: number) {
   }
   return output[0]
 }
-
-// ─── Keyframes ─────────────────────────────────────────────────────────────
-const dockEntrance = keyframes({
-  '0%': { opacity: 0, transform: 'translate(-50%, -50%) translateY(80px)' },
-  '100%': { opacity: 1, transform: 'translate(-50%, -50%) translateY(0)' },
-})
 
 // ─── Dock button style ──────────────────────────────────────────────────────
 const dockButtonCss = css({
@@ -371,6 +366,17 @@ function CraftIcon() {
   )
 }
 
+function PlayIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <rect opacity="0.25" x="2" y="6" width="20" height="12" rx="4" fill="currentColor" />
+      <path d="M7 10V14M5 12H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="16" cy="11" r="1.25" fill="currentColor" />
+      <circle cx="18.5" cy="13.5" r="1.25" fill="currentColor" />
+    </svg>
+  )
+}
+
 function PhotosIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -408,11 +414,20 @@ export default function Dock() {
   const [soundEnabled] = useSoundEnabled()
   const [playBlow] = useSound('/sounds/blow.mp3', { soundEnabled })
   const isMounted = useRef(false)
+  const chromeHidden = useChromeHidden()
+  const [shown, setShown] = useState(false)
 
   useEffect(() => {
     if (isMounted.current) playBlow()
     isMounted.current = true
   }, [router.route]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Drives the entrance reveal and the hide-during-game transition.
+  useEffect(() => {
+    const t = setTimeout(() => setShown(true), 200)
+    return () => clearTimeout(t)
+  }, [])
+  const dockTranslateY = chromeHidden ? 132 : shown ? 0 : 80
 
   return (
     <Box
@@ -433,14 +448,21 @@ export default function Dock() {
         left: '50%',
         borderRadius: 9999,
         zIndex: 10,
-        transform: 'translate(-50%, -50%) translateY(80px)',
-        animation: `${dockEntrance} 500ms ease forwards 200ms`,
         '.dark &': { background: 'rgba(22, 22, 22, 0.8)' },
         '@media (max-width: 374px)': {
           width: 'calc(100% - 69px)',
           top: 'unset',
           bottom: 0,
         },
+      }}
+      style={{
+        transform: `translate(-50%, -50%) translateY(${dockTranslateY}px)`,
+        opacity: chromeHidden ? 0 : shown ? 1 : 0,
+        pointerEvents: chromeHidden ? 'none' : 'auto',
+        // Slower, gentler when hiding into a run; snappier when returning to the menu.
+        transition: chromeHidden
+          ? 'transform 820ms cubic-bezier(.33,0,.2,1), opacity 700ms ease'
+          : 'transform 440ms cubic-bezier(.2,.8,.2,1), opacity 320ms ease',
       }}
       onPointerMove={(e: React.PointerEvent) => {
         if (e.pointerType === 'mouse') setMouseX(e.clientX)
@@ -483,6 +505,10 @@ export default function Dock() {
 
           <DockItem href="/craft" label="Craft">
             <CraftIcon />
+          </DockItem>
+
+          <DockItem href="/play" label="Play">
+            <PlayIcon />
           </DockItem>
 
           {/*

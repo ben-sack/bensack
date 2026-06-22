@@ -26,6 +26,7 @@ export default function App({ Component, pageProps }: AppProps) {
     margin: '0 auto',
     '@mobile': { pt: '40px' },
     ...(route === '/' ? { padding: 0, maxWidth: 'none', minHeight: '100dvh', overflow: 'hidden' } : {}),
+    ...(route === '/play' ? { padding: 0, maxWidth: 'none', minHeight: '100dvh', overflow: 'hidden' } : {}),
     ...(route === '/work'   ? { maxWidth: 720 } : {}),
     ...(route === '/genart' ? { maxWidth: 900, py: '40px' } : {}),
     ...(route === '/craft' ? { maxWidth: 720, padding: '8px 0px 4px 4px' } : {}),
@@ -45,7 +46,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
 
         <ThemeProvider disableTransitionOnChange attribute="class" value={{ dark: darkTheme.className }}>
-        {route !== '/' && route !== '/genart' && route !== '/craft' && route !== '/craft/[slug]' && (
+        {route !== '/' && route !== '/play' && route !== '/genart' && route !== '/craft' && route !== '/craft/[slug]' && (
           <div style={{ opacity: 0.13, pointerEvents: 'none' }}>
             <SignalField mode="density" maxFps={24} fullControls={false} />
           </div>
