@@ -507,11 +507,14 @@ export default function Dock() {
             <CraftIcon />
           </DockItem>
 
+          {/*
+          Play/game intentionally omitted from the dock — it lives as an easter egg
+          behind an arcade buddy in the playground world (see lib/zones.ts).
+
           <DockItem href="/play" label="Play">
             <PlayIcon />
           </DockItem>
 
-          {/*
           <DockItem href="/photos" label="Photos">
             <PhotosIcon />
           </DockItem>

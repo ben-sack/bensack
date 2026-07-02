@@ -4,8 +4,10 @@ import { useTheme } from 'next-themes'
 import SEO from '../components/SEO'
 import type { BotEffect, BotScene } from '../components/SignalField'
 import { shuffleLetters } from '../lib/utils'
+import { ZONES, ZONE_ORDER } from '../lib/zones'
 
 const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
+const GameBuddy   = dynamic(() => import('../components/GameBuddy'),   { ssr: false })
 
 const EFFECTS: { id: BotEffect; label: string }[] = [
   { id: 'clouds', label: 'clouds' },
@@ -13,10 +15,12 @@ const EFFECTS: { id: BotEffect; label: string }[] = [
   { id: 'stars', label: 'stars' },
 ]
 
-const SCENES: { id: BotScene; label: string }[] = [
-  { id: 'nature', label: 'nature' },
-  { id: 'city',   label: 'city'   },
-]
+// World picker is driven by the zone registry — add a zone in lib/zones.ts and it
+// shows up here automatically.
+const SCENES: { id: BotScene; label: string }[] = ZONE_ORDER.map((id) => ({
+  id,
+  label: ZONES[id].label,
+}))
 
 
 // ─── Dot ──────────────────────────────────────────────────────────────────────
@@ -175,10 +179,60 @@ export default function Home() {
     return () => { document.body.style.overflow = '' }
   }, [])
 
+  // Restore the playground (and the last-visited world) so navigating away and
+  // back keeps it open instead of resetting to the dimmed default.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('sf:playground') === '1') setPlayground(true)
+      const saved = localStorage.getItem('sf:scene') as BotScene | null
+      if (saved && SCENES.some((s) => s.id === saved)) setScene(saved)
+    } catch { /* storage unavailable — fall back to defaults */ }
+  }, [])
+
+  // Persist on change. Skips the initial mount so it can't clobber the values the
+  // restore effect just read.
+  const persistGuard = useRef(true)
+  useEffect(() => {
+    if (persistGuard.current) { persistGuard.current = false; return }
+    try {
+      localStorage.setItem('sf:playground', playground ? '1' : '0')
+      localStorage.setItem('sf:scene', scene)
+    } catch { /* ignore */ }
+  }, [scene, playground])
+
   useEffect(() => {
     if (effectTouched) return
     setEffects(['clouds'])
   }, [resolvedTheme, effectTouched])
+
+  // Keyboard shortcuts (only while the playground is open):
+  //   1–5  → jump straight to a zone
+  //   [ ]  → cycle zones left / right
+  useEffect(() => {
+    if (!playground) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+
+      const numeric = Number(e.key)
+      if (numeric >= 1 && numeric <= SCENES.length) {
+        setScene(SCENES[numeric - 1].id)
+        return
+      }
+      if (e.key === ']' || e.key === '[') {
+        setScene((current) => {
+          const idx = SCENES.findIndex((s) => s.id === current)
+          const next = e.key === ']'
+            ? (idx + 1) % SCENES.length
+            : (idx - 1 + SCENES.length) % SCENES.length
+          return SCENES[next].id
+        })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [playground])
 
   return (
     <>
@@ -196,6 +250,9 @@ export default function Home() {
           buddyRemoveRequest={buddyRemoveRequest}
         />
       </div>
+
+      {/* The hidden-game buddy peeks in above the canvas; only in the playground. */}
+      <GameBuddy visible={playground} mobile={mobile} />
 
       <div style={{
         position:  'fixed',
@@ -299,7 +356,7 @@ export default function Home() {
                   </span>
                 ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, color: 'var(--colors-gray8)', fontFamily: 'var(--fonts-body)', textTransform: 'lowercase', letterSpacing: '0.02em', width: 32 }}>
                   world
                 </span>

@@ -722,6 +722,28 @@ function generateNature(cols: number, rows: number, dark: boolean): ArtCell[] {
   return cells
 }
 
+// ─── Data-driven zone registry ──────────────────────────────────────────────────
+// Backdrops + platforms for each BotScene live behind these maps so the render
+// loop, caches, and bg-build animation can stay fully generic. To add a zone:
+// write a backdrop + platform generator (in the style of generateNature/City),
+// extend the BotScene union, and add one line to each map below.
+const SCENE_BACKDROPS: Record<BotScene, (cols: number, rows: number, dark: boolean) => ArtCell[]> = {
+  nature: (cols, rows, dark) => generateNature(cols, rows, dark),
+  city:   (cols, rows)       => generateCity(cols, rows),
+}
+
+const SCENE_PLATFORMS: Record<BotScene, (cols: number, rows: number, cellW: number, cellH: number) => Platform[]> = {
+  nature: generateNaturePlatforms,
+  city:   generateCityPlatforms,
+}
+
+// Rows below this fraction are hidden from a scene's *backdrop* so buddies read
+// in front of street-level detail. null → render the whole backdrop.
+function sceneBackdropCutoff(scene: BotScene, rows: number): number | null {
+  if (scene === 'city') return Math.floor(rows * 0.84)
+  return null
+}
+
 // ─── Stateful mode types ────────────────────────────────────────────────────────
 interface RainCol {
   leadY:    number
@@ -859,20 +881,27 @@ export default function SignalField({
     const dragHistory: Array<{ x: number; y: number; t: number }> = []
 
     // Scene cache – invalidated on resize
-    let cachedCity:        ArtCell[]           | null = null
-    let cachedCityPlats:   Platform[]          | null = null
-    let cityBgStars:       ConstellationStar[] | null = null
-    let cachedNature:      ArtCell[]           | null = null
-    let cachedNaturePlats: Platform[]          | null = null
-    let natureBgStars:     ConstellationStar[] | null = null
+    // Data-driven per-zone caches. Backdrops + platforms are generated lazily on
+    // first use and regenerated on resize (see clearSceneCaches / resize).
+    const sceneCellCache: Partial<Record<BotScene, ArtCell[]>>  = {}
+    const scenePlatCache: Partial<Record<BotScene, Platform[]>> = {}
+    let sceneBgStars: ConstellationStar[] | null = null
+
+    function sceneCells(s: BotScene): ArtCell[] {
+      let c = sceneCellCache[s]
+      if (!c) { c = SCENE_BACKDROPS[s](cols, rows, isDarkRef.current); sceneCellCache[s] = c }
+      return c
+    }
+    function scenePlats(s: BotScene): Platform[] {
+      let p = scenePlatCache[s]
+      if (!p) { p = SCENE_PLATFORMS[s](cols, rows, CELL_W, CELL_H); scenePlatCache[s] = p }
+      return p
+    }
 
     function invalidateSceneCache() {
-      cachedCity        = null
-      cachedCityPlats   = null
-      cityBgStars       = null
-      cachedNature      = null
-      cachedNaturePlats = null
-      natureBgStars     = null
+      for (const k of Object.keys(sceneCellCache) as BotScene[]) delete sceneCellCache[k]
+      for (const k of Object.keys(scenePlatCache) as BotScene[]) delete scenePlatCache[k]
+      sceneBgStars = null
     }
 
     function makeBgAnim(cells: ArtCell[]): ConstellationStar[] {
@@ -889,15 +918,12 @@ export default function SignalField({
       }))
     }
 
-    function initCityBgAnim() {
-      if (!cachedCity) cachedCity = generateCity(cols, rows)
-      const streetRow = Math.floor(rows * 0.84)
-      cityBgStars = makeBgAnim(cachedCity.filter(cell => cell.row < streetRow))
-    }
-
-    function initNatureBgAnim() {
-      if (!cachedNature) cachedNature = generateNature(cols, rows, isDarkRef.current)
-      natureBgStars = makeBgAnim(cachedNature)
+    // Kick off the spring-in animation that assembles a zone's backdrop from a
+    // scatter of characters. Generic across every BotScene.
+    function initSceneBgAnim(s: BotScene) {
+      const cutoff = sceneBackdropCutoff(s, rows)
+      const cells = cutoff == null ? sceneCells(s) : sceneCells(s).filter(cell => cell.row < cutoff)
+      sceneBgStars = makeBgAnim(cells)
     }
 
     // ── Init functions ──────────────────────────────────────────────────────────
@@ -915,8 +941,7 @@ export default function SignalField({
       conLastSwitch = now
       shootStars = []
       shootTimer = 1 + Math.random() * 3   // first star appears quickly
-      if (!cachedCity) cachedCity = generateCity(cols, rows)
-      const scene = cachedCity
+      const scene = sceneCells('city')
       conStars = scene.map(cell => ({
         x:    Math.random() * W,
         y:    Math.random() * H,
@@ -1177,19 +1202,10 @@ export default function SignalField({
     }
 
     function initBots() {
-      if (sceneRef.current === 'city') {
-        setupPlatforms()
-        setupGroundProps()
-        if (!cachedCityPlats) cachedCityPlats = generateCityPlatforms(cols, rows, CELL_W, CELL_H)
-        platforms   = cachedCityPlats
-        groundProps = []
-        initCityBgAnim()
-      } else {
-        if (!cachedNaturePlats) cachedNaturePlats = generateNaturePlatforms(cols, rows, CELL_W, CELL_H)
-        platforms   = cachedNaturePlats
-        groundProps = []
-        initNatureBgAnim()
-      }
+      const s = sceneRef.current
+      platforms   = scenePlats(s)
+      groundProps = []
+      initSceneBgAnim(s)
       setupPortal()
       initSky()
       particles = []
@@ -1366,11 +1382,7 @@ export default function SignalField({
       if (m === 'rain') initRain()
       if (m === 'city') initCity(now)
       if (m === 'bots') {
-        cachedCity      = null   // all backdrop caches must regenerate at new dimensions
-        cachedCityPlats = null
-        cityBgStars     = null
-        cachedNature    = null
-        natureBgStars   = null
+        invalidateSceneCache()   // all backdrop caches must regenerate at new dimensions
         initBots()
         if (hasEffect('stars')) initStars()
         if (hasEffect('rain')) initBotsRain()
@@ -2083,12 +2095,12 @@ export default function SignalField({
         }
       }
 
-      if (sceneRef.current === 'city') {
-        // ── City backdrop — builds in with spring animation, then static ──────
-        if (!cachedCity) cachedCity = generateCity(cols, rows)
-        const streetRow = Math.floor(rows * 0.84)
-
-        if (cityBgStars) {
+      // ── Zone backdrop — builds in with a spring animation, then renders static ─
+      // Generic across every BotScene (nature, city, beach, mountains, terminal).
+      {
+        const sc        = sceneRef.current
+        const cutoff    = sceneBackdropCutoff(sc, rows)
+        if (sceneBgStars) {
           // Spring phase: each cell converges from a random start position
           type SR = { x: number; y: number; ch: string }
           const farBkt:  SR[] = []
@@ -2096,7 +2108,7 @@ export default function SignalField({
           const nearBkt: SR[] = []
           let settled = 0
 
-          for (const star of cityBgStars) {
+          for (const star of sceneBgStars) {
             star.vx += (star.tx - star.x) * star.rate
             star.vy += (star.ty - star.y) * star.rate
             star.vx *= 0.92
@@ -2133,66 +2145,12 @@ export default function SignalField({
           }
 
           // Hand off to static once 95% of cells have converged
-          if (settled > cityBgStars.length * 0.95) cityBgStars = null
+          if (settled > sceneBgStars.length * 0.95) sceneBgStars = null
         } else {
           // Static phase after animation completes
           c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
-          for (const cell of cachedCity) {
-            if (cell.row >= streetRow) continue
-            c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
-          }
-        }
-      } else {
-        // ── Nature backdrop — spring animation then static ──────────────────
-        if (!cachedNature) cachedNature = generateNature(cols, rows, dark)
-
-        if (natureBgStars) {
-          type SR = { x: number; y: number; ch: string }
-          const farBkt:  SR[] = []
-          const midBkt:  SR[] = []
-          const nearBkt: SR[] = []
-          let settled = 0
-
-          for (const star of natureBgStars) {
-            star.vx += (star.tx - star.x) * star.rate
-            star.vy += (star.ty - star.y) * star.rate
-            star.vx *= 0.92
-            star.vy *= 0.92
-            star.x  += star.vx
-            star.y  += star.vy
-
-            const dx   = star.x - star.tx
-            const dy   = star.y - star.ty
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            if (dist < 3) settled++
-
-            const col = Math.round(star.x / CELL_W)
-            const row = Math.round(star.y / CELL_H)
-            if (col < 0 || col >= cols || row < 0 || row >= rows) continue
-            const px = col * CELL_W, py = row * CELL_H
-
-            if      (dist < 20) nearBkt.push({ x: px, y: py, ch: star.ch })
-            else if (dist < 90) midBkt.push({ x: px, y: py, ch: star.ch })
-            else                farBkt.push({ x: px, y: py, ch: star.ch })
-          }
-
-          if (farBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.07)' : 'rgba(30,30,30,0.08)'
-            for (const s of farBkt)  c2d.fillText(s.ch, s.x, s.y)
-          }
-          if (midBkt.length  > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,30,30,0.13)'
-            for (const s of midBkt)  c2d.fillText(s.ch, s.x, s.y)
-          }
-          if (nearBkt.length > 0) {
-            c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
-            for (const s of nearBkt) c2d.fillText(s.ch, s.x, s.y)
-          }
-
-          if (settled > natureBgStars.length * 0.95) natureBgStars = null
-        } else {
-          c2d.fillStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(30,30,30,0.20)'
-          for (const cell of cachedNature) {
+          for (const cell of sceneCells(sc)) {
+            if (cutoff != null && cell.row >= cutoff) continue
             c2d.fillText(cell.ch, cell.col * CELL_W, cell.row * CELL_H)
           }
         }
@@ -2626,17 +2584,9 @@ export default function SignalField({
         const sc = sceneRef.current
         if (sc !== prevScene) {
           prevScene = sc
-          if (sc === 'city') {
-            if (!cachedCityPlats) cachedCityPlats = generateCityPlatforms(cols, rows, CELL_W, CELL_H)
-            platforms   = cachedCityPlats
-            groundProps = []
-            initCityBgAnim()   // spring animation: cells build in from random positions
-          } else {
-            if (!cachedNaturePlats) cachedNaturePlats = generateNaturePlatforms(cols, rows, CELL_W, CELL_H)
-            platforms   = cachedNaturePlats
-            groundProps = []
-            initNatureBgAnim()
-          }
+          platforms   = scenePlats(sc)
+          groundProps = []
+          initSceneBgAnim(sc)   // spring animation: cells build in from random positions
         }
       }
 

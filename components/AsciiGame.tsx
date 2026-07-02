@@ -120,8 +120,6 @@ type Phase = 'launcher' | 'menu' | 'playing' | 'paused' | 'dead'
 // Arcade registry — add an entry to list a new game in the launcher.
 const GAMES: { id: string; label: string; available: boolean }[] = [
   { id: 'buddyrun', label: 'buddy run', available: true },
-  { id: 'soon-1', label: 'coming soon', available: false },
-  { id: 'soon-2', label: 'coming soon', available: false },
 ]
 
 const ASSEMBLE_TIME = 1.3   // seconds for the launcher sphere to assemble
@@ -1307,9 +1305,12 @@ export default function AsciiGame() {
         }}
       />
 
-      {/* Launcher / arcade home */}
+      {/* Launcher / arcade home. The list is anchored just below the emblem:
+          launcherCenter() centers the sphere at 27dvh (W.h*0.27) with radius
+          min(12vw,12dvh) (min(W,H)*0.12), so its bottom edge is at
+          calc(27dvh + min(12vw,12dvh)); the paddingTop adds a small gap on top. */}
       {phase === 'launcher' && (
-        <div style={{ ...overlayBase, justifyContent: 'flex-start', paddingTop: 'min(46vh, 420px)' }}>
+        <div style={{ ...overlayBase, justifyContent: 'flex-start', paddingTop: 'calc(27dvh + min(12vw, 12dvh) + 48px)' }}>
           <p style={{ fontSize: 13, letterSpacing: '0.34em', textTransform: 'lowercase', color: 'var(--colors-gray11)', margin: 0 }}>arcade</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 18, pointerEvents: 'auto' }}>
             {GAMES.map((g, i) => (
