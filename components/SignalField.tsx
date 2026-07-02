@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/router'
 import { useTheme } from 'next-themes'
 
 // ─── Modes ─────────────────────────────────────────────────────────────────────
@@ -173,6 +174,9 @@ const BUDDY_PHRASES: Record<string, string[]> = {
   // chonk:    ['*nap*',  'chonk',  'nom',    '...'],
 }
 const GREET_PHRASES = ['hi!', 'hello!', 'hey!', 'yo!', 'sup?', 'hiya!', ':)']
+// Foreshadowing lines for the hidden arcade — only the ✦-juggling game buddy
+// says these, so the hint always points at the buddy you can actually click.
+const GAME_PHRASES  = ['play?', 'race you?', 'hi score?', '▶', '1up!', 'wanna play?']
 const BUBBLE_LIFE   = 3.0   // seconds a speech bubble stays visible
 
 // ─── Ground props ──────────────────────────────────────────────────────────────
@@ -217,6 +221,8 @@ interface BuddyState {
   greetIdx:      number    // index of buddy being greeted (-1 if none)
   sleepPhase:    number    // drives the floating-z animation
   bubble:        { text: string; life: number } | null
+  isGame:        boolean   // the one buddy that juggles a ✦ and opens the arcade
+  jugglePhase:   number    // drives the juggled-sparkle toss (game buddy only)
 }
 
 interface Platform   { x: number; y: number; w: number }
@@ -793,9 +799,12 @@ export default function SignalField({
   const spawnRequestRef = useRef(buddySpawnRequest)
   const removeRequestRef = useRef(buddyRemoveRequest)
   const onBuddyCountChangeRef = useRef(onBuddyCountChange)
+  const router = useRouter()
+  const routerRef = useRef(router)
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
+  useEffect(() => { routerRef.current = router }, [router])
   useEffect(() => setMounted(true), [])
   useEffect(() => { isDarkRef.current = resolvedTheme === 'dark' }, [resolvedTheme])
   useEffect(() => { modeRef.current = mode }, [mode])
@@ -879,6 +888,33 @@ export default function SignalField({
     let dragOffY = 0    // cursor-y minus buddy.y at drag start
     // Short position history for throw-velocity calculation on release
     const dragHistory: Array<{ x: number; y: number; t: number }> = []
+
+    // ── Arcade launch (tap the game buddy) ───────────────────────────────────────
+    let gameLaunching = false
+    let launchTimer: ReturnType<typeof setTimeout> | null = null
+
+    // A press-then-release with almost no movement over a short window = a tap
+    // (as opposed to a drag/throw). Used to open the arcade from the game buddy.
+    const wasTap = (): boolean => {
+      if (dragHistory.length < 2) return true
+      const a = dragHistory[0], z = dragHistory[dragHistory.length - 1]
+      const moved = Math.hypot(z.x - a.x, z.y - a.y)
+      return moved < 8 && (z.t - a.t) < 400
+    }
+
+    // Fire a small ✦ burst off the buddy, then route to the hidden arcade.
+    const launchGame = (b: BuddyState) => {
+      if (gameLaunching) return
+      gameLaunching = true
+      const cx = b.x + BW / 2, cy = b.y + BH / 2
+      for (let k = 0; k < 16; k++) {
+        const ang = (Math.PI * 2 * k) / 16
+        const spd = 120 + Math.random() * 100
+        particles.push({ x: cx, y: cy, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 60, life: 1.0, ch: k % 2 ? '✦' : '·' })
+      }
+      document.body.style.cursor = ''
+      launchTimer = setTimeout(() => { routerRef.current.push('/play', undefined, { scroll: false }) }, 300)
+    }
 
     // Scene cache – invalidated on resize
     // Data-driven per-zone caches. Backdrops + platforms are generated lazily on
@@ -1162,7 +1198,20 @@ export default function SignalField({
         greetIdx: -1,
         sleepPhase: 0,
         bubble: null,
+        isGame: false,
+        jugglePhase: Math.random(),
       }
+    }
+
+    // Exactly one visible buddy carries the arcade easter egg. Keep that invariant
+    // as buddies spawn, get removed, or the field re-inits on resize.
+    function ensureGameBuddy() {
+      if (modeRef.current !== 'bots') return
+      const live = buddies.filter((b) => !b.outro)
+      if (live.length === 0) return
+      if (live.some((b) => b.isGame)) return
+      const pick = live.find((b) => !b.intro) ?? live[0]
+      pick.isGame = true
     }
 
     function spawnBuddy() {
@@ -1174,6 +1223,7 @@ export default function SignalField({
       const arrival: 'portal' | 'perch' = sceneRef.current === 'city' && portal ? 'portal' : 'perch'
       buddies.push(createBuddy(pickBuddySpecies(), plat, arrival, true))
       portalCooldown.push(arrival === 'portal' ? 8 : 0)
+      ensureGameBuddy()
       emitBuddyCount()
     }
 
@@ -1182,7 +1232,8 @@ export default function SignalField({
       if (buddies.length <= 1) return
       let removeIdx = buddies.length - 1
       for (let i = buddies.length - 1; i >= 0; i--) {
-        if (!buddies[i].intro && !buddies[i].outro && i !== dragIdx) {
+        // Never retire the arcade buddy — it's the only way into the hidden game.
+        if (!buddies[i].intro && !buddies[i].outro && !buddies[i].isGame && i !== dragIdx) {
           removeIdx = i
           break
         }
@@ -1199,6 +1250,7 @@ export default function SignalField({
         dragIdx = -1
         dragHistory.length = 0
       }
+      ensureGameBuddy()
     }
 
     function initBots() {
@@ -1216,6 +1268,7 @@ export default function SignalField({
       const spawnPlats = chooseSpawnPlatforms(true)
       buddies = Array.from({ length: COUNT }, (_, i) => createBuddy(shuffled[i % shuffled.length], spawnPlats[i % spawnPlats.length], 'perch'))
       portalCooldown = new Array(buddies.length).fill(0)
+      ensureGameBuddy()
       emitBuddyCount()
     }
 
@@ -1423,6 +1476,14 @@ export default function SignalField({
     const onMouseUp = (e: MouseEvent) => {
       if (dragIdx < 0) return
       const b = buddies[dragIdx]
+      // A tap on the arcade buddy opens the game instead of throwing it.
+      if (b && b.isGame && wasTap()) {
+        launchGame(b)
+        dragIdx = -1
+        dragHistory.length = 0
+        document.body.style.cursor = ''
+        return
+      }
       // Compute throw velocity from recent drag history
       if (dragHistory.length >= 2) {
         const oldest  = dragHistory[0]
@@ -1478,6 +1539,13 @@ export default function SignalField({
       mouseRef.current = { x: -9999, y: -9999 }
       if (dragIdx < 0) return
       const b = buddies[dragIdx]
+      // A tap on the arcade buddy opens the game instead of throwing it.
+      if (b && b.isGame && wasTap()) {
+        launchGame(b)
+        dragIdx = -1
+        dragHistory.length = 0
+        return
+      }
       if (dragHistory.length >= 2) {
         const oldest  = dragHistory[0]
         const newest  = dragHistory[dragHistory.length - 1]
@@ -1854,6 +1922,9 @@ export default function SignalField({
           if (b.bubble.life <= 0) b.bubble = null
         }
 
+        // Advance the juggled-sparkle toss for the arcade buddy.
+        if (b.isGame) b.jugglePhase += dt
+
         // Mouse repel (horizontal push, slight upward bump)
         const cx = b.x + BW / 2, cy = b.y + BH / 2
         const mdx = cx - mx, mdy = cy - my
@@ -1881,9 +1952,10 @@ export default function SignalField({
               b.timer  = 1.5 + Math.random() * 2.5
             } else if (roll < 0.72) {
               b.state = 'pause'; b.timer = 0.6 + Math.random() * 1.2
-              // 2% chance to mutter something on entering a pause (keep it rare)
-              if (!b.bubble && Math.random() < 0.02) {
-                const opts = BUDDY_PHRASES[b.species] ?? ['...']
+              // Rare mutter on pause. The arcade buddy speaks up more often, and
+              // from the game-phrase pool, so it quietly foreshadows the game.
+              if (!b.bubble && Math.random() < (b.isGame ? 0.14 : 0.02)) {
+                const opts = b.isGame ? GAME_PHRASES : (BUDDY_PHRASES[b.species] ?? ['...'])
                 b.bubble = { text: opts[Math.floor(Math.random() * opts.length)], life: BUBBLE_LIFE }
               }
             } else {
@@ -2251,6 +2323,23 @@ export default function SignalField({
         c2d.fillText(p.ch, p.x, p.y)
       }
 
+      // ── Arcade buddy: orbiting ✦ (back half) ─────────────────────────────────
+      // Drawn before the sprites so the sparkle is occluded as it passes behind.
+      c2d.textAlign = 'center'
+      for (const b of buddies) {
+        if (!b.isGame || b.intro || b.outro || b.state === 'sleep') continue
+        const a = b.jugglePhase * 2.2
+        const depth = Math.cos(a)               // +1 in front, -1 behind
+        if (depth >= 0) continue                // front half drawn after sprites
+        const sx = b.x + BW / 2 + Math.sin(a) * BW * 0.6
+        const sy = b.y + BH * 0.5 + depth * BH * 0.42
+        const near = (depth + 1) / 2            // 0 (far) … 0.5 (side)
+        const al = (dark ? 0.14 : 0.12) + near * 0.32
+        c2d.fillStyle = dark ? `rgba(255,255,255,${al})` : `rgba(30,30,30,${al})`
+        c2d.fillText(near > 0.28 ? '+' : '·', sx, sy)
+      }
+      c2d.textAlign = 'left'
+
       // ── Buddies ─────────────────────────────────────────────────────────────
       for (const b of buddies) {
         if (b.intro || b.outro) {
@@ -2283,7 +2372,14 @@ export default function SignalField({
           continue
         }
 
-        c2d.fillStyle = dark ? 'rgba(255,255,255,0.58)' : 'rgba(30,30,30,0.52)'
+        // The arcade buddy is a touch brighter and gently shimmers, so it reads
+        // as "shiny" / special without any extra props.
+        let bodyA = dark ? 0.58 : 0.52
+        if (b.isGame) {
+          const shimmer = 0.5 + 0.5 * Math.sin(b.jugglePhase * 3)
+          bodyA = (dark ? 0.74 : 0.66) + shimmer * (dark ? 0.18 : 0.14)
+        }
+        c2d.fillStyle = dark ? `rgba(255,255,255,${bodyA})` : `rgba(30,30,30,${bodyA})`
         const frames = BUDDY_BODIES[b.species]
         const frame  = frames[b.animFrame % frames.length]
         for (let li = 0; li < frame.length; li++) {
@@ -2292,6 +2388,25 @@ export default function SignalField({
           c2d.fillText(line, b.x, b.y + li * CELL_H)
         }
       }
+
+      // ── Arcade buddy: orbiting ✦ (front half) ────────────────────────────────
+      // The one buddy you can tap has a sparkle circling it — foreshadows the
+      // game's collectible glyph and marks it as special. Drawn after the sprites
+      // so it reads as passing in front; the back half was drawn above.
+      c2d.textAlign = 'center'
+      for (const b of buddies) {
+        if (!b.isGame || b.intro || b.outro || b.state === 'sleep') continue
+        const a = b.jugglePhase * 2.2
+        const depth = Math.cos(a)
+        if (depth < 0) continue                 // back half drawn before sprites
+        const sx = b.x + BW / 2 + Math.sin(a) * BW * 0.6
+        const sy = b.y + BH * 0.5 + depth * BH * 0.42
+        const near = (depth + 1) / 2            // 0.5 (side) … 1 (nearest)
+        const al = Math.min(1, (dark ? 0.52 : 0.46) + (near - 0.5) * (dark ? 0.9 : 0.8))
+        c2d.fillStyle = dark ? `rgba(255,255,255,${al})` : `rgba(30,30,30,${al})`
+        c2d.fillText(near > 0.82 ? '✦' : '+', sx, sy)
+      }
+      c2d.textAlign = 'left'
 
       // ── Sleep z's ───────────────────────────────────────────────────────────
       for (const b of buddies) {
@@ -2519,10 +2634,12 @@ export default function SignalField({
 
       // ── Cursor feedback (grab when hoverable, grabbing while dragging) ──────
       const hx = mouseRef.current.x, hy = mouseRef.current.y
+      const hovered = buddies.find(b => hx >= b.x && hx <= b.x + BW && hy >= b.y && hy <= b.y + BH)
       const wantCursor = dragIdx >= 0
         ? 'grabbing'
-        : buddies.some(b => hx >= b.x && hx <= b.x + BW && hy >= b.y && hy <= b.y + BH)
-        ? 'grab' : ''
+        : hovered
+        ? (hovered.isGame ? 'pointer' : 'grab')
+        : ''
       if (document.body.style.cursor !== wantCursor) document.body.style.cursor = wantCursor
     }
 
@@ -2622,6 +2739,7 @@ export default function SignalField({
 
     return () => {
       cancelAnimationFrame(animId)
+      if (launchTimer) clearTimeout(launchTimer)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('resize',     resize)
       if (animate) {

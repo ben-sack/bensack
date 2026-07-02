@@ -7,7 +7,6 @@ import { shuffleLetters } from '../lib/utils'
 import { ZONES, ZONE_ORDER } from '../lib/zones'
 
 const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
-const GameBuddy   = dynamic(() => import('../components/GameBuddy'),   { ssr: false })
 
 const EFFECTS: { id: BotEffect; label: string }[] = [
   { id: 'clouds', label: 'clouds' },
@@ -250,9 +249,6 @@ export default function Home() {
           buddyRemoveRequest={buddyRemoveRequest}
         />
       </div>
-
-      {/* The hidden-game buddy peeks in above the canvas; only in the playground. */}
-      <GameBuddy visible={playground} mobile={mobile} />
 
       <div style={{
         position:  'fixed',
