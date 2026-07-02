@@ -7,6 +7,7 @@ import { CSS } from '@stitches/react'
 import { css, config } from '../stitches.config'
 import { useSoundEnabled } from '../lib/useSound'
 import { useChromeHidden } from '../lib/uiChrome'
+import { useColorToggle } from '../lib/useColor'
 import Box from './Box'
 
 // ─── Mouse position context ────────────────────────────────────────────────
@@ -86,7 +87,7 @@ function Separator() {
 interface DockItemProps {
   href?: string
   label: string
-  onClick?: () => void
+  onClick?: (e: React.MouseEvent) => void
   children: React.ReactNode
   css?: CSS<typeof config>
 }
@@ -109,7 +110,7 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
   const size = useSpring(40, itemSpring)
   const y = useSpring(0, jumpSpring)
 
-  async function handleClick() {
+  async function handleClick(e: React.MouseEvent) {
     setHovered(false)
     if (href) {
       if (href.startsWith('/')) {
@@ -118,7 +119,7 @@ function DockItem({ href, label, onClick, children, css: cssProp }: DockItemProp
         window.open(href)
       }
     }
-    onClick?.()
+    onClick?.(e)
     y.set(window.innerWidth < 700 ? -20 : -40)
     setTimeout(() => y.set(0), 300)
   }
@@ -335,6 +336,46 @@ function SoundToggle() {
   )
 }
 
+// ─── Color toggle ────────────────────────────────────────────────────────────
+// Flips the whole site between grayscale and the Venice-sunset wash. The ink
+// bleed emanates from this button, so we hand its screen-center to the store.
+function ColorToggle() {
+  const [colorOn, toggleColor] = useColorToggle()
+  return (
+    <DockItem
+      label={colorOn ? 'Back to grayscale' : 'Add some color'}
+      onClick={(e) => {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        toggleColor({
+          x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
+          y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
+        })
+      }}
+    >
+      <ColorIcon />
+    </DockItem>
+  )
+}
+
+function ColorIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 3C12 3 6 9.4 6 14A6 6 0 0 0 18 14C18 9.4 12 3 12 3Z"
+        fill="currentColor"
+        opacity="0.25"
+      />
+      <path
+        d="M12 3C12 3 6 9.4 6 14A6 6 0 0 0 18 14C18 9.4 12 3 12 3Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="9.6" cy="14.3" r="1.4" fill="currentColor" opacity="0.9" />
+    </svg>
+  )
+}
+
 // ─── Icons ──────────────────────────────────────────────────────────────────
 function HomeIcon() {
   return (
@@ -531,6 +572,8 @@ export default function Dock() {
           </DockItem>
 
           <Separator />
+
+          <ColorToggle />
 
           <DockItem
             label="Toggle theme"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { useTheme } from 'next-themes'
+import { useColorState } from '../lib/useColor'
 
 // ─── Modes ─────────────────────────────────────────────────────────────────────
 export type FieldMode  = 'density' | 'waves' | 'rain' | 'city' | 'bots'
@@ -801,10 +802,17 @@ export default function SignalField({
   const onBuddyCountChangeRef = useRef(onBuddyCountChange)
   const router = useRouter()
   const routerRef = useRef(router)
+  const colorState = useColorState()
+  const colorOnRef = useRef(colorState.on)
+  const colorOriginRef = useRef(colorState.origin)
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { routerRef.current = router }, [router])
+  useEffect(() => {
+    colorOnRef.current = colorState.on
+    colorOriginRef.current = colorState.origin
+  }, [colorState])
   useEffect(() => setMounted(true), [])
   useEffect(() => { isDarkRef.current = resolvedTheme === 'dark' }, [resolvedTheme])
   useEffect(() => { modeRef.current = mode }, [mode])
@@ -2643,6 +2651,51 @@ export default function SignalField({
       if (document.body.style.cursor !== wantCursor) document.body.style.cursor = wantCursor
     }
 
+    // ── Grayscale → color pass ───────────────────────────────────────────────────
+    // The "add some color" effect, done natively so the *characters* get painted,
+    // not the page. `source-atop` fills the Venice-sunset gradient only where glyphs
+    // were already drawn (their alpha is the mask), so the transparent background —
+    // and therefore the true white/black page behind — is left untouched. A slow
+    // radial reveal from the toggle origin makes the color spread through the field.
+    let colorProgress = colorOnRef.current ? 1 : 0
+    const COLOR_DUR = 2.2   // seconds for the wash to fully spread
+    function applyColorPass(dt: number) {
+      const target = colorOnRef.current ? 1 : 0
+      if (colorProgress !== target) {
+        const step = dt / COLOR_DUR
+        colorProgress = target > colorProgress
+          ? Math.min(target, colorProgress + step)
+          : Math.max(target, colorProgress - step)
+      }
+      if (colorProgress <= 0.001) return
+
+      const o  = colorOriginRef.current
+      const ox = (o.x / 100) * W
+      const oy = (o.y / 100) * H
+      const maxR = Math.hypot(Math.max(ox, W - ox), Math.max(oy, H - oy)) + 40
+
+      c2d.save()
+      c2d.globalCompositeOperation = 'source-atop'
+      c2d.beginPath()
+      c2d.arc(ox, oy, colorProgress * maxR, 0, Math.PI * 2)
+      c2d.clip()
+      const g = c2d.createLinearGradient(0, 0, W, H)
+      if (isDarkRef.current) {
+        g.addColorStop(0,    'hsl(14 90% 66%)')
+        g.addColorStop(0.34, 'hsl(330 85% 71%)')
+        g.addColorStop(0.68, 'hsl(255 85% 74%)')
+        g.addColorStop(1,    'hsl(190 85% 62%)')
+      } else {
+        g.addColorStop(0,    'hsl(14 85% 46%)')
+        g.addColorStop(0.34, 'hsl(330 72% 50%)')
+        g.addColorStop(0.68, 'hsl(255 60% 52%)')
+        g.addColorStop(1,    'hsl(190 80% 38%)')
+      }
+      c2d.fillStyle = g
+      c2d.fillRect(0, 0, W, H)
+      c2d.restore()
+    }
+
     // ── Main loop ───────────────────────────────────────────────────────────────
     function draw(now: number) {
       while (processedSpawnRequest < spawnRequestRef.current) {
@@ -2711,6 +2764,8 @@ export default function SignalField({
       else if (m === 'rain')                      drawRain(dt)
       else if (m === 'city')                      drawCity(now, dt)
       else if (m === 'bots')                      drawBots(dt, now)
+
+      applyColorPass(dt)
 
       if (animate) animId = requestAnimationFrame(draw)
     }

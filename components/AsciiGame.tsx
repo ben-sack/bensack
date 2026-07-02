@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
+import { useColorState } from '../lib/useColor'
 import { useSoundEnabled } from '../lib/useSound'
 import { setChromeHidden } from '../lib/uiChrome'
 import { shuffleLetters } from '../lib/utils'
@@ -213,9 +214,17 @@ export default function AsciiGame() {
   const worldRef    = useRef<World | null>(null)
   const audioRef    = useRef<AudioContext | null>(null)
 
+  const colorState = useColorState()
+  const colorOnRef = useRef(colorState.on)
+  const colorOriginRef = useRef(colorState.origin)
+
   useEffect(() => { darkRef.current = resolvedTheme !== 'light' }, [resolvedTheme])
   useEffect(() => { soundRef.current = soundEnabled }, [soundEnabled])
   useEffect(() => { speciesRef.current = speciesIndex }, [speciesIndex])
+  useEffect(() => {
+    colorOnRef.current = colorState.on
+    colorOriginRef.current = colorState.origin
+  }, [colorState])
 
   const setPhase = useCallback((p: Phase) => { phaseRef.current = p; setPhaseState(p) }, [])
   useEffect(() => { gameIndexRef.current = gameIndex }, [gameIndex])
@@ -1092,6 +1101,48 @@ export default function AsciiGame() {
       }
     }
 
+    // ── Grayscale → color pass ───────────────────────────────────────────────
+    // Same trick as SignalField: `source-atop` paints the Venice gradient only
+    // onto glyphs already drawn, so the game's background stays true black/white.
+    let colorProgress = colorOnRef.current ? 1 : 0
+    const COLOR_DUR = 2.2
+    const applyColorPass = (dt: number) => {
+      const target = colorOnRef.current ? 1 : 0
+      if (colorProgress !== target) {
+        const step = dt / COLOR_DUR
+        colorProgress = target > colorProgress
+          ? Math.min(target, colorProgress + step)
+          : Math.max(target, colorProgress - step)
+      }
+      if (colorProgress <= 0.001) return
+
+      const o  = colorOriginRef.current
+      const ox = (o.x / 100) * W.w
+      const oy = (o.y / 100) * W.h
+      const maxR = Math.hypot(Math.max(ox, W.w - ox), Math.max(oy, W.h - oy)) + 40
+
+      c2d.save()
+      c2d.globalCompositeOperation = 'source-atop'
+      c2d.beginPath()
+      c2d.arc(ox, oy, colorProgress * maxR, 0, Math.PI * 2)
+      c2d.clip()
+      const g = c2d.createLinearGradient(0, 0, W.w, W.h)
+      if (darkRef.current) {
+        g.addColorStop(0,    'hsl(14 90% 66%)')
+        g.addColorStop(0.34, 'hsl(330 85% 71%)')
+        g.addColorStop(0.68, 'hsl(255 85% 74%)')
+        g.addColorStop(1,    'hsl(190 85% 62%)')
+      } else {
+        g.addColorStop(0,    'hsl(14 85% 46%)')
+        g.addColorStop(0.34, 'hsl(330 72% 50%)')
+        g.addColorStop(0.68, 'hsl(255 60% 52%)')
+        g.addColorStop(1,    'hsl(190 80% 38%)')
+      }
+      c2d.fillStyle = g
+      c2d.fillRect(0, 0, W.w, W.h)
+      c2d.restore()
+    }
+
     // ── Loop ─────────────────────────────────────────────────────────────────
     let raf = 0
     let last = performance.now()
@@ -1100,7 +1151,7 @@ export default function AsciiGame() {
       let dt = (now - last) / 1000
       last = now
       if (dt > 1 / 20) dt = 1 / 20
-      if (!document.hidden) { update(dt); draw() }
+      if (!document.hidden) { update(dt); draw(); applyColorPass(dt) }
     }
 
     // ── Input ────────────────────────────────────────────────────────────────

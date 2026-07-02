@@ -208,10 +208,33 @@ export const globalStyles = globalCss({
     // No-op with macOS overlay scrollbars; fixes the left/right "shake" on
     // classic scrollbars (Windows, some Linux/Firefox setups).
     scrollbarGutter: 'stable',
+    // Slow ease when the ink tokens swap to hues for "add some color". These
+    // tokens are registered as typed <color> props (see components/ColorWash),
+    // so the value itself interpolates and every text/icon consumer eases along.
+    transition:
+      '--colors-gray8 1.7s ease, --colors-gray9 1.7s ease, --colors-gray10 1.7s ease, --colors-gray11 1.7s ease, --colors-gray12 1.7s ease',
   },
   'body': {
     margin: 0,
     background: 'var(--colors-gray1)',
+  },
+  // "Add some color" — recolor only the foreground ink tokens (text + icons via
+  // currentColor). Background tokens (gray1–7) are untouched, so the page stays
+  // true white/black; hues are tuned to keep each token's rough lightness so
+  // everything stays readable in both themes.
+  '.colorized:not(.dark)': {
+    '--colors-gray12': 'hsl(255 55% 33%)',
+    '--colors-gray11': 'hsl(330 62% 44%)',
+    '--colors-gray10': 'hsl(14 78% 46%)',
+    '--colors-gray9':  'hsl(190 68% 36%)',
+    '--colors-gray8':  'hsl(190 42% 56%)',
+  },
+  '.dark.colorized': {
+    '--colors-gray12': 'hsl(255 90% 84%)',
+    '--colors-gray11': 'hsl(330 85% 75%)',
+    '--colors-gray10': 'hsl(14 90% 68%)',
+    '--colors-gray9':  'hsl(190 80% 60%)',
+    '--colors-gray8':  'hsl(190 48% 46%)',
   },
   '.hidden': { display: 'none' },
   '@font-face': [

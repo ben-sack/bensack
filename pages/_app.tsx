@@ -9,6 +9,7 @@ import Box from '../components/Box'
 import Dock from '../components/Dock'
 
 const SignalField = dynamic(() => import('../components/SignalField'), { ssr: false })
+const ColorWash   = dynamic(() => import('../components/ColorWash'),   { ssr: false })
 
 globalStyles()
 
@@ -55,6 +56,9 @@ export default function App({ Component, pageProps }: AppProps) {
         <Box as="main" css={mainCss}>
           <Component {...pageProps} key={router.route} />
         </Box>
+        {/* Global grayscale→color wash. Sits above everything and blends its hue
+            onto the whole site; pointer-events:none so it never blocks input. */}
+        <ColorWash />
       </ThemeProvider>
     </>
   )
