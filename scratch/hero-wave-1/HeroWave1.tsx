@@ -1,10 +1,10 @@
 // THROWAWAY — wave 1 hero prototype. Not production polish.
 // Two whole shapes behind one switcher so they can be felt in the same preview.
 //   /prototype/hero            the world (default)
-//   /prototype/hero?v=host     the host (a signal receiver, not a buddy)
+//   /prototype/hero?v=host     the host (a cctv that pans and tilts toward the pointer)
 // Keys 1 and 2 swap shapes. Live home (/) is untouched.
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -26,37 +26,12 @@ const TRAILS: { href: string; label: string; aside: string }[] = [
   { href: '/play', label: 'play', aside: 'arcade' },
 ]
 
-// Original instrument. Not a buddy. A receiver: dish, feed, mast.
-// Ray pair + feed horn animate. The mount stays put.
-const FEED = ['+', '×', '◆', '×']
-const RAYS: string[][] = [
-  [String.raw`      \\   |   //      `, String.raw`       \\  |  //       `],
-  [String.raw`       \\  |  //       `, String.raw`        \\ | //        `],
-  [String.raw`        \  |  /        `, String.raw`         \ | /         `],
-  [String.raw`       //  |  \\       `, String.raw`      //   |   \\      `],
-]
-const DISH = [
-  String.raw`        .--' '--.      `,
-  String.raw`      /   .---.   \    `,
-  String.raw`     |   /     \   |   `,
-  String.raw`     |  |   +   |  |   `,
-  String.raw`     |   \     /   |   `,
-  String.raw`      \   '---'   /    `,
-  String.raw`        '--. .--'      `,
-  String.raw`       //  |  \\       `,
-  String.raw`      //   |   \\      `,
-  String.raw`          |||          `,
-  String.raw`      ====|||====      `,
-  String.raw`          |||          `,
-  String.raw`         /   \         `,
-]
+// Pan/tilt limits, degrees. The housing cannot wind past the mount.
+const YAW_LIMIT: [number, number] = [-46, 42]
+const PITCH_LIMIT: [number, number] = [-24, 28]
 
-function carrierFrame(index: number): string[] {
-  const feed = FEED[index % FEED.length]
-  return [
-    ...RAYS[index % RAYS.length],
-    ...DISH.map((row) => row.replace('+', feed)),
-  ]
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
 }
 
 function useHeroShape(): [HeroShape | null, (next: HeroShape) => void] {
@@ -319,40 +294,211 @@ function WorldShape() {
   )
 }
 
-function Carrier({ mobile }: { mobile: boolean }) {
-  const [frame, setFrame] = useState(0)
+function Cctv({ mobile }: { mobile: boolean }) {
   const reduced = useReducedMotion()
   const time = useVeniceClock()
+  const pivotRef = useRef<HTMLDivElement>(null)
+  const panRef = useRef<HTMLDivElement>(null)
+  const tiltRef = useRef<HTMLDivElement>(null)
+  const aim = useRef({ x: 0, y: 0, live: false })
+  const yaw = useRef(12)
+  const pitch = useRef(-4)
 
   useEffect(() => {
-    if (reduced) return
-    const id = setInterval(() => setFrame((current) => (current + 1) % RAYS.length), 260)
-    return () => clearInterval(id)
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return
+      aim.current = { x: e.clientX, y: e.clientY, live: true }
+    }
+    window.addEventListener('pointermove', onMove)
+    const onOut = (e: PointerEvent) => {
+      if (!e.relatedTarget) aim.current.live = false
+    }
+    window.addEventListener('pointerout', onOut)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerout', onOut)
+    }
+  }, [])
+
+  useEffect(() => {
+    let raf = 0
+    const tick = (now: number) => {
+      const pivot = pivotRef.current
+      let ty = 14
+      let tp = -4
+      if (!reduced && aim.current.live && pivot) {
+        const rect = pivot.getBoundingClientRect()
+        const dx = aim.current.x - (rect.left + rect.width / 2)
+        const dy = aim.current.y - (rect.top + rect.height / 2)
+        const depth = 320
+        // Lens sits on the right end of the barrel. Positive yaw swings it right.
+        ty = clamp(Math.atan2(dx, depth) * (180 / Math.PI), YAW_LIMIT[0], YAW_LIMIT[1])
+        tp = clamp(Math.atan2(dy, depth) * (180 / Math.PI), PITCH_LIMIT[0], PITCH_LIMIT[1])
+      } else if (!reduced) {
+        const t = now / 1000
+        ty = Math.sin(t * 0.42) * 22
+        tp = Math.sin(t * 0.23) * 6 - 3
+      }
+      const k = reduced ? 1 : 0.075
+      yaw.current += (ty - yaw.current) * k
+      pitch.current += (tp - pitch.current) * k
+      if (panRef.current) panRef.current.style.transform = `rotateY(${yaw.current.toFixed(2)}deg)`
+      if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${pitch.current.toFixed(2)}deg)`
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [reduced])
 
-  const lines = carrierFrame(frame)
+  const scale = mobile ? 0.78 : 1
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-      <span className="vh">signal</span>
-      <pre
-        aria-hidden
-        style={{
-          margin: 0,
-          fontFamily: 'Menlo, "Courier New", monospace',
-          fontSize: mobile ? 11 : 14,
-          lineHeight: 1.05,
-          letterSpacing: 0,
-          color: 'var(--colors-gray12)',
-          userSelect: 'none',
-        }}
-      >
-        {lines.join('\n')}
-      </pre>
-      <p style={{ ...mono, fontVariantNumeric: 'tabular-nums' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, flexShrink: 0, pointerEvents: 'none' }}>
+      <span className="vh">security camera</span>
+      <div style={{ width: 230 * scale, height: 248 * scale }}>
+        <div style={{ width: 230, height: 248, transform: `scale(${scale})`, transformOrigin: 'top left', position: 'relative' }}>
+          <div style={poleStyle} />
+          <div style={armStyle} />
+          <div style={knuckleStyle} />
+          <div style={boltStyle} />
+          <div ref={pivotRef} style={pivotStyle}>
+            <div ref={panRef} style={jointStyle}>
+              <div ref={tiltRef} style={jointStyle}>
+                <div style={hoodStyle} />
+                <div style={barrelStyle} />
+                <div style={bezelStyle}>
+                  <div style={lensStyle} />
+                  <div style={glintStyle} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style={{ ...mono, fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>
         {time ? `${time}  ·  venice` : 'venice'}
       </p>
     </div>
   )
+}
+
+const metal = 'linear-gradient(180deg, #f3f0e8 0%, #d8d2c6 46%, #b7b1a4 100%)'
+const metalDark = 'linear-gradient(180deg, #cfc8bb 0%, #a39d92 100%)'
+
+const poleStyle: CSSProperties = {
+  position: 'absolute',
+  left: 22,
+  top: 36,
+  width: 18,
+  height: 206,
+  borderRadius: 2,
+  background: 'repeating-linear-gradient(to bottom, #c4beb2 0 3px, #8f897e 3px 6px)',
+  boxShadow: 'inset -3px 0 0 rgba(0,0,0,0.18)',
+}
+
+const armStyle: CSSProperties = {
+  position: 'absolute',
+  left: 32,
+  top: 118,
+  width: 78,
+  height: 16,
+  borderRadius: 3,
+  background: metal,
+  boxShadow: '0 2px 0 #8d877c',
+}
+
+const knuckleStyle: CSSProperties = {
+  position: 'absolute',
+  left: 10,
+  top: 108,
+  width: 40,
+  height: 36,
+  borderRadius: 8,
+  background: metalDark,
+  boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.25)',
+}
+
+const boltStyle: CSSProperties = {
+  position: 'absolute',
+  left: 24,
+  top: 120,
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  background: 'radial-gradient(circle at 35% 35%, #eeeae2, #6d675e 70%)',
+  zIndex: 1,
+}
+
+const pivotStyle: CSSProperties = {
+  position: 'absolute',
+  left: 92,
+  top: 78,
+  width: 20,
+  height: 20,
+  perspective: 640,
+}
+
+const jointStyle: CSSProperties = {
+  position: 'relative',
+  width: 20,
+  height: 20,
+  transformStyle: 'preserve-3d',
+  transformOrigin: '10px 16px',
+}
+
+const hoodStyle: CSSProperties = {
+  position: 'absolute',
+  left: 28,
+  top: -18,
+  width: 86,
+  height: 22,
+  borderRadius: '3px 12px 2px 2px',
+  background: 'linear-gradient(180deg, #b7b1a4, #8a8478)',
+  transform: 'translateZ(8px)',
+  boxShadow: '0 1px 0 rgba(255,255,255,0.25) inset',
+}
+
+const barrelStyle: CSSProperties = {
+  position: 'absolute',
+  left: 8,
+  top: -8,
+  width: 112,
+  height: 40,
+  borderRadius: '6px 22px 22px 6px',
+  background: metal,
+  boxShadow: 'inset 0 -8px 0 rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.28)',
+}
+
+const bezelStyle: CSSProperties = {
+  position: 'absolute',
+  left: 102,
+  top: -2,
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  background: 'radial-gradient(circle at 40% 40%, #3a3a3a, #111 62%, #000)',
+  boxShadow: '0 0 0 3px #8d877c, inset 0 0 0 2px #1a1a1a',
+  transform: 'translateZ(6px)',
+}
+
+const lensStyle: CSSProperties = {
+  position: 'absolute',
+  left: 9,
+  top: 9,
+  width: 18,
+  height: 18,
+  borderRadius: '50%',
+  background: 'radial-gradient(circle at 40% 38%, #6a6a6a, #0c0c0c 70%)',
+}
+
+const glintStyle: CSSProperties = {
+  position: 'absolute',
+  left: 13,
+  top: 11,
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  background: 'rgba(255,255,255,0.55)',
 }
 
 const mono: CSSProperties = {
@@ -395,7 +541,7 @@ function HostShape() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
         >
-          <Carrier mobile={mobile} />
+          <Cctv mobile={mobile} />
         </motion.div>
         <motion.div
           initial={reduced ? false : { opacity: 0, y: 8 }}
