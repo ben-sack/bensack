@@ -33,6 +33,8 @@ export default function App({ Component, pageProps }: AppProps) {
     ...(route === '/craft' ? { maxWidth: 720, padding: '8px 0px 4px 4px' } : {}),
     ...(route === '/craft/[slug]' ? { padding: 0, maxWidth: 'none', minHeight: '100dvh' } : {}),
     ...(route === '/photos' ? { padding: 8, maxWidth: 'none' } : {}),
+    // Throwaway hero prototype — full-bleed stage, same as home. Not the live page.
+    ...(route === '/prototype/hero' ? { padding: 0, maxWidth: 'none', minHeight: '100dvh', overflow: 'hidden' } : {}),
   }
 
   return (
@@ -47,7 +49,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
 
         <ThemeProvider disableTransitionOnChange attribute="class" value={{ dark: darkTheme.className }}>
-        {route !== '/' && route !== '/play' && route !== '/genart' && route !== '/craft' && route !== '/craft/[slug]' && (
+        {route !== '/' && route !== '/play' && route !== '/genart' && route !== '/craft' && route !== '/craft/[slug]' && route !== '/prototype/hero' && (
           <div style={{ opacity: 0.13, pointerEvents: 'none' }}>
             <SignalField mode="density" maxFps={24} fullControls={false} />
           </div>
