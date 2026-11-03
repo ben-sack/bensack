@@ -1,7 +1,7 @@
 // THROWAWAY — wave 1 hero prototype. Not production polish.
 // Two whole shapes behind one switcher so they can be felt in the same preview.
 //   /prototype/hero            the world (default)
-//   /prototype/hero?v=host     the host
+//   /prototype/hero?v=host     the host (a signal receiver, not a buddy)
 // Keys 1 and 2 swap shapes. Live home (/) is untouched.
 
 import { useEffect, useState, type CSSProperties } from 'react'
@@ -9,34 +9,55 @@ import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { AnimatePresence, motion } from 'framer-motion'
-import { BUDDY_BODIES } from '../../lib/buddies'
-import { ZONES } from '../../lib/zones'
+import { motion } from 'framer-motion'
 
 const SignalField = dynamic(() => import('../../components/SignalField'), { ssr: false })
 
 type HeroShape = 'world' | 'host'
 
-const sage = ZONES.nature.npcs.find((n) => n.id === 'nature-sage')
-const GREETING = sage?.lines[0] ?? '...take your time out here.'
-const GUIDE = sage?.lines[1] ?? 'everything ben makes is one trail away.'
-
-const BIO = [
-  'ben sack. data engineer at databricks.',
+const LINES = [
+  'data engineer at databricks.',
   'also responsible for whatever this is.',
 ]
 
-const TRAILS = [
-  { href: '/work', label: 'work' },
-  { href: '/craft', label: 'craft' },
-  { href: '/play', label: 'play' },
+const TRAILS: { href: string; label: string; aside: string }[] = [
+  { href: '/work', label: 'work', aside: 'systems' },
+  { href: '/craft', label: 'craft', aside: 'generative' },
+  { href: '/play', label: 'play', aside: 'arcade' },
 ]
 
-const REPLIES: { href: string; label: string; aside: string }[] = [
-  { href: '/work', label: 'work', aside: 'the systems he actually ships.' },
-  { href: '/craft', label: 'craft', aside: 'the pretty little experiments.' },
-  { href: '/play', label: 'the arcade', aside: "pip's hiding a tiny one back there." },
+// Original instrument. Not a buddy. A receiver: dish, feed, mast.
+// Ray pair + feed horn animate. The mount stays put.
+const FEED = ['+', '×', '◆', '×']
+const RAYS: string[][] = [
+  [String.raw`      \\   |   //      `, String.raw`       \\  |  //       `],
+  [String.raw`       \\  |  //       `, String.raw`        \\ | //        `],
+  [String.raw`        \  |  /        `, String.raw`         \ | /         `],
+  [String.raw`       //  |  \\       `, String.raw`      //   |   \\      `],
 ]
+const DISH = [
+  String.raw`        .--' '--.      `,
+  String.raw`      /   .---.   \    `,
+  String.raw`     |   /     \   |   `,
+  String.raw`     |  |   +   |  |   `,
+  String.raw`     |   \     /   |   `,
+  String.raw`      \   '---'   /    `,
+  String.raw`        '--. .--'      `,
+  String.raw`       //  |  \\       `,
+  String.raw`      //   |   \\      `,
+  String.raw`          |||          `,
+  String.raw`      ====|||====      `,
+  String.raw`          |||          `,
+  String.raw`         /   \         `,
+]
+
+function carrierFrame(index: number): string[] {
+  const feed = FEED[index % FEED.length]
+  return [
+    ...RAYS[index % RAYS.length],
+    ...DISH.map((row) => row.replace('+', feed)),
+  ]
+}
 
 function useHeroShape(): [HeroShape | null, (next: HeroShape) => void] {
   const router = useRouter()
@@ -264,10 +285,10 @@ function WorldShape() {
               color: 'var(--colors-gray12)',
             }}
           >
-            the meadow
+            ben sack
           </h1>
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {BIO.map((line) => (
+            {LINES.map((line) => (
               <p
                 key={line}
                 style={{
@@ -285,10 +306,9 @@ function WorldShape() {
             ))}
           </div>
           <nav
-            aria-label="Trails"
-            style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 18 }}
+            aria-label="Go"
+            style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 18 }}
           >
-            <span style={quiet}>↳</span>
             {TRAILS.map((trail) => (
               <TextLink key={trail.href} href={trail.href} label={trail.label} size={16} dim="var(--colors-gray12)" />
             ))}
@@ -299,67 +319,55 @@ function WorldShape() {
   )
 }
 
-function SageSprite({ mobile }: { mobile: boolean }) {
+function Carrier({ mobile }: { mobile: boolean }) {
   const [frame, setFrame] = useState(0)
-  const [eye, setEye] = useState('·')
   const reduced = useReducedMotion()
+  const time = useVeniceClock()
 
   useEffect(() => {
     if (reduced) return
-    const id = setInterval(() => setFrame((current) => (current + 1) % BUDDY_BODIES.turtle.length), 680)
+    const id = setInterval(() => setFrame((current) => (current + 1) % RAYS.length), 260)
     return () => clearInterval(id)
   }, [reduced])
 
-  useEffect(() => {
-    if (reduced) return
-    const id = setInterval(() => {
-      setEye('-')
-      window.setTimeout(() => setEye('·'), 140)
-    }, 3400)
-    return () => clearInterval(id)
-  }, [reduced])
-
-  const lines = BUDDY_BODIES.turtle[frame]
-    .map((line) => line.replace(/·/g, eye))
-    .filter((line, index) => !(index === 0 && line.trim() === ''))
+  const lines = carrierFrame(frame)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      <span style={quiet}>{sage?.name ?? 'sage'}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <span className="vh">signal</span>
       <pre
         aria-hidden
         style={{
           margin: 0,
           fontFamily: 'Menlo, "Courier New", monospace',
-          fontSize: mobile ? 22 : 40,
-          lineHeight: 1.08,
+          fontSize: mobile ? 11 : 14,
+          lineHeight: 1.05,
+          letterSpacing: 0,
           color: 'var(--colors-gray12)',
           userSelect: 'none',
         }}
       >
         {lines.join('\n')}
       </pre>
+      <p style={{ ...mono, fontVariantNumeric: 'tabular-nums' }}>
+        {time ? `${time}  ·  venice` : 'venice'}
+      </p>
     </div>
   )
+}
+
+const mono: CSSProperties = {
+  margin: 0,
+  fontFamily: 'Menlo, "Courier New", monospace',
+  fontSize: 11,
+  letterSpacing: '0.04em',
+  textTransform: 'lowercase',
+  color: 'var(--colors-gray10)',
 }
 
 function HostShape() {
   const mobile = useMobile()
   const reduced = useReducedMotion()
-  const [beat, setBeat] = useState(reduced ? 3 : 0)
   const [aside, setAside] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (reduced) { setBeat(3); return }
-    setBeat(0)
-    const timers = [
-      window.setTimeout(() => setBeat(1), 280),
-      window.setTimeout(() => setBeat(2), 900),
-      window.setTimeout(() => setBeat(3), 1600),
-    ]
-    return () => timers.forEach((id) => window.clearTimeout(id))
-  }, [reduced])
-
-  const guideLine = aside ?? GUIDE
 
   return (
     <div data-shape="host">
@@ -377,92 +385,59 @@ function HostShape() {
           display: 'flex',
           flexDirection: mobile ? 'column' : 'row',
           alignItems: mobile ? 'flex-start' : 'center',
-          gap: mobile ? 18 : 36,
-          maxWidth: mobile ? 'none' : 820,
-          width: mobile ? 'auto' : 'min(820px, calc(100vw - 12vw))',
+          gap: mobile ? 22 : 48,
+          maxWidth: mobile ? 'none' : 860,
+          width: mobile ? 'auto' : 'min(860px, calc(100vw - 12vw))',
         }}
       >
         <motion.div
           initial={reduced ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
         >
-          <h1 className="vh">sage</h1>
-          <SageSprite mobile={mobile} />
+          <Carrier mobile={mobile} />
         </motion.div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-          <AnimatePresence mode="wait">
-            {beat >= 1 && (
-              <motion.p
-                key="greet"
-                initial={reduced ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                style={hostLine(mobile, 'var(--colors-gray12)')}
-              >
-                {GREETING}
-              </motion.p>
-            )}
-          </AnimatePresence>
-          {beat >= 2 && (
-            <motion.div
-              initial={reduced ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              {BIO.map((line) => (
-                <p key={line} style={hostLine(mobile, 'var(--colors-gray11)')}>{line}</p>
-              ))}
-            </motion.div>
-          )}
-          {beat >= 3 && (
-            <motion.div
-              initial={reduced ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-            >
-              <AnimatePresence mode="wait">
-                <motion.p
-                  key={guideLine}
-                  initial={reduced ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  style={hostLine(mobile, 'var(--colors-gray10)')}
-                >
-                  {guideLine}
-                </motion.p>
-              </AnimatePresence>
-              <nav aria-label="Ask sage" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                {REPLIES.map((reply) => (
-                  <span key={reply.href} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={quiet}>↳</span>
-                    <TextLink
-                      href={reply.href}
-                      label={reply.label}
-                      size={mobile ? 16 : 18}
-                      onHover={() => setAside(reply.aside)}
-                      onLeave={() => setAside(null)}
-                    />
-                  </span>
-                ))}
-              </nav>
-            </motion.div>
-          )}
-        </div>
+        <motion.div
+          initial={reduced ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: reduced ? 0 : 0.08, ease: 'easeOut' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}
+        >
+          <div>
+            <h1 style={hostLine(mobile, 'var(--colors-gray12)', true)}>ben sack</h1>
+            {LINES.map((line) => (
+              <p key={line} style={hostLine(mobile, 'var(--colors-gray11)')}>{line}</p>
+            ))}
+          </div>
+          <nav aria-label="Go" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+            {TRAILS.map((trail) => (
+              <span key={trail.href} style={{ display: 'flex', alignItems: 'baseline', gap: 14, minHeight: 22 }}>
+                <TextLink
+                  href={trail.href}
+                  label={trail.label}
+                  size={mobile ? 16 : 18}
+                  dim="var(--colors-gray12)"
+                  onHover={() => setAside(trail.aside)}
+                  onLeave={() => setAside(null)}
+                />
+                <span aria-hidden style={{ ...mono, opacity: aside === trail.aside ? 1 : 0 }}>{trail.aside}</span>
+              </span>
+            ))}
+          </nav>
+        </motion.div>
       </div>
     </div>
   )
 }
 
-function hostLine(mobile: boolean, color: string): CSSProperties {
+function hostLine(mobile: boolean, color: string, name = false): CSSProperties {
   return {
     margin: 0,
     fontFamily: 'var(--fonts-body)',
-    fontSize: mobile ? 16 : 20,
-    lineHeight: mobile ? '24px' : '28px',
-    letterSpacing: '-0.02em',
+    fontWeight: name ? 500 : 400,
+    fontSize: name ? (mobile ? 28 : 34) : (mobile ? 15 : 17),
+    lineHeight: name ? 1.05 : (mobile ? '22px' : '26px'),
+    letterSpacing: name ? '-0.03em' : '-0.02em',
     textTransform: 'lowercase',
     color,
   }
